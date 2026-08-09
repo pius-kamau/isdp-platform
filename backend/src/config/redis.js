@@ -1,28 +1,48 @@
-const Redis = require('ioredis');
+const { Redis } = require('@upstash/redis');
 const logger = require('./logger');
 
 class RedisClient {
   constructor() {
     this.client = null;
+    this.isConfigured = false;
   }
 
   async connect() {
     try {
-      const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-      this.client = new Redis(redisUrl);
+      // Check for Upstash environment variables
+      const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
+      const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-      this.client.on('connect', () => {
-        logger.info('✅ Redis connected successfully');
-      });
+      if (upstashUrl && upstashToken) {
+        // Connect using Upstash REST API
+        this.client = new Redis({
+          url: upstashUrl,
+          token: upstashToken,
+        });
+        this.isConfigured = true;
+        logger.info('✅ Upstash Redis connected successfully via REST API');
+        
+        // Test the connection
+        await this.client.ping();
+        return this.client;
+      }
 
-      this.client.on('error', (error) => {
-        logger.error('Redis error:', error);
-      });
+      // Fallback to standard Redis URL (for local development)
+      const redisUrl = process.env.REDIS_URL;
+      if (redisUrl) {
+        const Redis = require('ioredis');
+        this.client = new Redis(redisUrl);
+        this.isConfigured = true;
+        logger.info('✅ Redis connected successfully via URL');
+        return this.client;
+      }
 
-      await this.client.ping();
-      return this.client;
+      logger.warn('⚠️ No Redis configuration found. Running without cache.');
+      return null;
+      
     } catch (error) {
-      logger.warn('⚠️ Redis connection failed. Running without cache.');
+      logger.warn('⚠️ Redis connection failed:', error.message);
+      this.isConfigured = false;
       return null;
     }
   }
@@ -32,16 +52,16 @@ class RedisClient {
   }
 
   async set(key, value, ttl = 3600) {
-    if (!this.client) return null;
+    if (!this.isConfigured || !this.client) return null;
     try {
-      await this.client.set(key, JSON.stringify(value), 'EX', ttl);
+      await this.client.set(key, JSON.stringify(value), { ex: ttl });
     } catch (error) {
       logger.error('Redis set error:', error);
     }
   }
 
   async get(key) {
-    if (!this.client) return null;
+    if (!this.isConfigured || !this.client) return null;
     try {
       const data = await this.client.get(key);
       return data ? JSON.parse(data) : null;
@@ -52,7 +72,7 @@ class RedisClient {
   }
 
   async del(key) {
-    if (!this.client) return null;
+    if (!this.isConfigured || !this.client) return null;
     try {
       await this.client.del(key);
     } catch (error) {
@@ -62,7 +82,9 @@ class RedisClient {
 
   async disconnect() {
     if (this.client) {
-      await this.client.quit();
+      // Upstash client doesn't have a quit method, but we can set it to null
+      this.client = null;
+      this.isConfigured = false;
       logger.info('Redis disconnected');
     }
   }

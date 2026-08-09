@@ -14,11 +14,10 @@ services:
         fromDatabase:
           name: isdp-database
           property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: isdp-redis
-          type: redis
-          property: connectionString
+      - key: UPSTASH_REDIS_REST_URL
+        value: "https://pure-beagle-187577.upstash.io"
+      - key: UPSTASH_REDIS_REST_TOKEN
+        value: "gQAAAAAAAty5AAIgcDI2ZWVkOWI3NjMwZjc0NjRlYjU3YjdkOWYyMmVhYTJmOA"
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
@@ -38,7 +37,4 @@ services:
 
 databases:
   - name: isdp-database
-    plan: free
-
-  - name: isdp-redis
     plan: free
