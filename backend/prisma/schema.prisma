@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model RecoveryCode {
+  id         String   @id @default(cuid())
+  userId     String
+  codeHash   String
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  usedAt     DateTime?
+
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([used])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  fullName     String
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String
+  profilePhoto String?
+  county       String
+  subCounty    String?
+  bio          String?
+  occupation   String?
+  role         String   @default("user")
+  isVerified   Boolean  @default(false)
+  isMentor     Boolean  @default(false)
+  isVolunteer  Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  emailVerified Boolean @default(false)
+  phoneVerified Boolean @default(false)
+  // 2FA Fields
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+  twoFactorBackup  DateTime?
+  lastLogin    DateTime?
+  loginCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  // Relationships
+  skills UserSkill[]
+  mentorshipRequestsMentee  MentorRequest[] @relation("menteeRequests")
+  mentorshipRequestsMentor  MentorRequest[] @relation("mentorRequests")
+  mentorshipSessionsMentee MentorSession[]  @relation("menteeSessions")
+  mentorshipSessionsMentor MentorSession[]  @relation("mentorSessions")
+  messagesSent   Message[] @relation("sentMessages")
+  messagesReceived Message[] @relation("receivedMessages")
+  notifications Notification[]
+  recoveryCodes  RecoveryCode[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+}
+
+model Skill {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  category    String?
+  icon        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userSkills  UserSkill[]
+  mentorRequests MentorRequest[]
+
+  @@index([name])
+  @@index([category])
+}
+
+model UserSkill {
+  id                String   @id @default(cuid())
+  userId            String
+  skillId           String
+  proficiencyLevel  String   @default("intermediate")
+  yearsExperience   Float?
+  isMentor          Boolean  @default(false)
+  isVolunteer       Boolean  @default(false)
+  verificationStatus String  @default("pending")
+  evidenceUrl       String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id])
+  skill             Skill    @relation(fields: [skillId], references: [id])
+
+  @@unique([userId, skillId])
+  @@index([userId])
+  @@index([skillId])
+  @@index([isMentor])
+}
+
+model MentorRequest {
+  id           String   @id @default(cuid())
+  menteeId     String
+  mentorId     String
+  skillId      String
+  message      String
+  status       String   @default("pending")
+  requestedAt  DateTime @default(now())
+  respondedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  mentee       User     @relation("menteeRequests", fields: [menteeId], references: [id])
+  mentor       User     @relation("mentorRequests", fields: [mentorId], references: [id])
+  skill        Skill    @relation(fields: [skillId], references: [id])
+  sessions     MentorSession[]
+
+  @@index([menteeId])
+  @@index([mentorId])
+  @@index([status])
+}
+
+model MentorSession {
+  id             String   @id @default(cuid())
+  requestId      String
+  mentorId       String
+  menteeId       String
+  scheduledAt    DateTime
+  durationMinutes Int     @default(60)
+  locationType   String   @default("virtual")
+  locationDetail String?
+  status         String   @default("scheduled")
+  notes          String?
+  attended       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  request        MentorRequest @relation(fields: [requestId], references: [id])
+  mentor         User     @relation("mentorSessions", fields: [mentorId], references: [id])
+  mentee         User     @relation("menteeSessions", fields: [menteeId], references: [id])
+
+  @@index([requestId])
+  @@index([mentorId])
+  @@index([menteeId])
+  @@index([scheduledAt])
+}
+
+model Message {
+  id           String   @id @default(cuid())
+  senderId     String
+  receiverId   String
+  messageText  String?
+  attachmentUrl String[]
+  isRead       Boolean  @default(false)
+  readAt       DateTime?
+  parentId     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sender       User     @relation("sentMessages", fields: [senderId], references: [id])
+  receiver     User     @relation("receivedMessages", fields: [receiverId], references: [id])
+  parent       Message? @relation("messageParent", fields: [parentId], references: [id])
+  replies      Message[] @relation("messageParent")
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id           String   @id @default(cuid())
+  userId       String
+  type         String
+  title        String
+  message      String
+  link         String?
+  isRead       Boolean  @default(false)
+  readAt       DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
