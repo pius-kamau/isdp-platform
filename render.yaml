@@ -5,7 +5,11 @@ services:
     repo: https://github.com/pius-kamau/isdp-platform
     branch: master
     plan: free
-    buildCommand: npm install && npx prisma generate
+    buildCommand: |
+      apt-get update
+      apt-get install -y build-essential libvips-dev
+      npm install
+      npx prisma generate
     startCommand: npm start
     envVars:
       - key: NODE_ENV
