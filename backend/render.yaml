@@ -2,6 +2,9 @@ services:
   - type: web
     name: isdp-backend
     runtime: node
+    repo: https://github.com/pius-kamau/isdp-platform
+    branch: master
+    plan: free
     buildCommand: npm install && npx prisma generate
     startCommand: npm start
     envVars:
@@ -20,6 +23,10 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      - key: JWT_EXPIRE
+        value: 7d
+      - key: JWT_REFRESH_EXPIRE
+        value: 30d
       - key: BREVO_API_KEY
         sync: false
       - key: BREVO_SENDER_EMAIL
