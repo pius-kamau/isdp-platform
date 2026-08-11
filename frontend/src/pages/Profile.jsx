@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   MapPin, Mail, Phone, Briefcase, ArrowLeft, User, 
   Edit2, Save, X, Clock, Award, Heart, 
   Plus, Trash2, GraduationCap, Sparkles, Camera,
-  FileText, CheckCircle, Upload, Calendar,
-  Building2, Star, Users
+  FileText, Upload, Calendar,
+  Star, Users
 } from "lucide-react";
 import { useDropzone } from 'react-dropzone';
 import apiClient from "../services/auth.service";
@@ -16,7 +16,6 @@ import toast from 'react-hot-toast';
 export default function Profile() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
   
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +48,7 @@ export default function Profile() {
     maxSize: 5242880,
     onDrop: (acceptedFiles) => {
       setNewQualification({ ...newQualification, file: acceptedFiles[0] });
+      toast.success('File ready for upload!');
     }
   });
 
@@ -56,7 +56,10 @@ export default function Profile() {
     const fetchUser = async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get(`/users/${id}`);
+        const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+        const response = await apiClient.get(`/users/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         const userData = response.data.data;
         setUser(userData);
         setEditForm({
@@ -92,6 +95,7 @@ export default function Profile() {
 
   const handleSave = async () => {
     try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
       const updateData = {
         fullName: editForm.fullName,
         bio: editForm.bio,
@@ -103,12 +107,15 @@ export default function Profile() {
         isVolunteer: editForm.isVolunteer,
       };
       
-      const response = await apiClient.put(`/users/${id}`, updateData);
+      const response = await apiClient.put(`/users/${id}`, updateData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setUser(response.data.data);
       setIsEditing(false);
       toast.success('Profile updated successfully!');
     } catch (err) {
-      toast.error('Failed to update profile');
+      console.error('Error saving profile:', err);
+      toast.error(err.response?.data?.message || 'Failed to update profile');
     }
   };
 
@@ -116,155 +123,44 @@ export default function Profile() {
     const file = e.target.files[0];
     if (!file) return;
     
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setUser(prev => ({ ...prev, profilePhoto: event.target.result }));
-      toast.success('Photo updated! (Save to persist)');
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Experience CRUD
-  const handleAddExperience = async () => {
-    if (!newExperience.title || !newExperience.company) {
-      toast.error('Please fill in title and company');
-      return;
-    }
     try {
-      const response = await apiClient.post('/profile/experience', newExperience);
-      setUser(prev => ({
-        ...prev,
-        experience: [...(prev.experience || []), response.data.data]
-      }));
-      setNewExperience({ title: "", company: "", years: "" });
-      toast.success('Experience added!');
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const reader = new FileReader();
+      
+      reader.onload = async (event) => {
+        setUser(prev => ({ ...prev, profilePhoto: event.target.result }));
+        
+        await apiClient.put(`/users/${id}`, {
+          profilePhoto: event.target.result
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        toast.success('Profile photo updated!');
+      };
+      reader.readAsDataURL(file);
     } catch (err) {
-      toast.error('Failed to add experience');
+      console.error('Error uploading photo:', err);
+      toast.error('Failed to upload photo');
     }
   };
 
-  const handleDeleteExperience = async (expId) => {
-    try {
-      await apiClient.delete(`/profile/experience/${expId}`);
-      setUser(prev => ({
-        ...prev,
-        experience: prev.experience.filter(e => e.id !== expId)
-      }));
-      toast.success('Experience deleted');
-    } catch (err) {
-      toast.error('Failed to delete experience');
-    }
-  };
-
-  // Qualification CRUD
-  const handleAddQualification = async () => {
-    if (!newQualification.name || !newQualification.issuer) {
-      toast.error('Please fill in name and issuer');
-      return;
-    }
-    try {
-      const data = { ...newQualification };
-      delete data.file;
-      const response = await apiClient.post('/profile/qualification', data);
-      setUser(prev => ({
-        ...prev,
-        qualifications: [...(prev.qualifications || []), response.data.data]
-      }));
-      setNewQualification({ name: "", issuer: "", year: "", file: null });
-      toast.success('Qualification added!');
-    } catch (err) {
-      toast.error('Failed to add qualification');
-    }
-  };
-
-  const handleDeleteQualification = async (qualId) => {
-    try {
-      await apiClient.delete(`/profile/qualification/${qualId}`);
-      setUser(prev => ({
-        ...prev,
-        qualifications: prev.qualifications.filter(q => q.id !== qualId)
-      }));
-      toast.success('Qualification deleted');
-    } catch (err) {
-      toast.error('Failed to delete qualification');
-    }
-  };
-
-  // Volunteering CRUD
-  const handleAddVolunteering = async () => {
-    if (!newVolunteering.title || !newVolunteering.organization) {
-      toast.error('Please fill in title and organization');
-      return;
-    }
-    try {
-      const response = await apiClient.post('/profile/volunteering', newVolunteering);
-      setUser(prev => ({
-        ...prev,
-        volunteering: [...(prev.volunteering || []), response.data.data]
-      }));
-      setNewVolunteering({ title: "", organization: "", hours: "" });
-      toast.success('Volunteering added!');
-    } catch (err) {
-      toast.error('Failed to add volunteering');
-    }
-  };
-
-  const handleDeleteVolunteering = async (volId) => {
-    try {
-      await apiClient.delete(`/profile/volunteering/${volId}`);
-      setUser(prev => ({
-        ...prev,
-        volunteering: prev.volunteering.filter(v => v.id !== volId)
-      }));
-      toast.success('Volunteering deleted');
-    } catch (err) {
-      toast.error('Failed to delete volunteering');
-    }
-  };
-
-  // Availability CRUD
-  const handleAddAvailability = async () => {
-    if (!newAvailability.day || !newAvailability.start || !newAvailability.end) {
-      toast.error('Please fill in all availability fields');
-      return;
-    }
-    try {
-      const response = await apiClient.post('/profile/availability', newAvailability);
-      setUser(prev => ({
-        ...prev,
-        availability: [...(prev.availability || []), response.data.data]
-      }));
-      setNewAvailability({ day: "", start: "", end: "" });
-      toast.success('Availability added!');
-    } catch (err) {
-      toast.error('Failed to add availability');
-    }
-  };
-
-  const handleDeleteAvailability = async (availId) => {
-    try {
-      await apiClient.delete(`/profile/availability/${availId}`);
-      setUser(prev => ({
-        ...prev,
-        availability: prev.availability.filter(a => a.id !== availId)
-      }));
-      toast.success('Availability deleted');
-    } catch (err) {
-      toast.error('Failed to delete availability');
-    }
-  };
-
-  // Skills CRUD
+  // ============ SKILLS ============
   const handleAddSkill = async () => {
     if (!newSkill.trim()) {
       toast.error('Please enter a skill name');
       return;
     }
     try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
       const skillResponse = await apiClient.post("/skills", {
         name: newSkill.trim(),
         category: "General"
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
+      
       const skillId = skillResponse.data.data.id;
       
       await apiClient.post("/skills/user", {
@@ -273,25 +169,227 @@ export default function Profile() {
         yearsExperience: 0,
         isMentor: false,
         isVolunteer: false
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
       });
       
-      const response = await apiClient.get(`/users/${id}`);
+      const response = await apiClient.get(`/users/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setUser(response.data.data);
       setNewSkill("");
       toast.success('Skill added!');
     } catch (err) {
-      toast.error('Failed to add skill');
+      console.error('Error adding skill:', err);
+      toast.error(err.response?.data?.message || 'Failed to add skill');
     }
   };
 
   const handleRemoveSkill = async (skillId) => {
     try {
-      await apiClient.delete(`/skills/user/${skillId}`);
-      const response = await apiClient.get(`/users/${id}`);
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      await apiClient.delete(`/skills/user/${skillId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      const response = await apiClient.get(`/users/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setUser(response.data.data);
       toast.success('Skill removed');
     } catch (err) {
+      console.error('Error removing skill:', err);
       toast.error('Failed to remove skill');
+    }
+  };
+
+  // ============ EXPERIENCE ============
+  const handleAddExperience = async () => {
+    if (!newExperience.title || !newExperience.company) {
+      toast.error('Please fill in title and company');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      const response = await apiClient.post('/profile/experience', {
+        title: newExperience.title,
+        company: newExperience.company,
+        years: newExperience.years || '0'
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setUser(prev => ({
+        ...prev,
+        experience: [...(prev.experience || []), response.data.data]
+      }));
+      setNewExperience({ title: "", company: "", years: "" });
+      toast.success('Experience added!');
+    } catch (err) {
+      console.error('Error adding experience:', err);
+      toast.error(err.response?.data?.message || 'Failed to add experience');
+    }
+  };
+
+  const handleDeleteExperience = async (expId) => {
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      await apiClient.delete(`/profile/experience/${expId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser(prev => ({
+        ...prev,
+        experience: prev.experience.filter(e => e.id !== expId)
+      }));
+      toast.success('Experience deleted');
+    } catch (err) {
+      console.error('Error deleting experience:', err);
+      toast.error('Failed to delete experience');
+    }
+  };
+
+  // ============ QUALIFICATIONS ============
+  const handleAddQualification = async () => {
+    if (!newQualification.name || !newQualification.issuer) {
+      toast.error('Please fill in name and issuer');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      const response = await apiClient.post('/profile/qualification', {
+        name: newQualification.name,
+        issuer: newQualification.issuer,
+        year: newQualification.year || '',
+        fileUrl: null
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setUser(prev => ({
+        ...prev,
+        qualifications: [...(prev.qualifications || []), response.data.data]
+      }));
+      setNewQualification({ name: "", issuer: "", year: "", file: null });
+      toast.success('Qualification added!');
+    } catch (err) {
+      console.error('Error adding qualification:', err);
+      toast.error(err.response?.data?.message || 'Failed to add qualification');
+    }
+  };
+
+  const handleDeleteQualification = async (qualId) => {
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      await apiClient.delete(`/profile/qualification/${qualId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser(prev => ({
+        ...prev,
+        qualifications: prev.qualifications.filter(q => q.id !== qualId)
+      }));
+      toast.success('Qualification deleted');
+    } catch (err) {
+      console.error('Error deleting qualification:', err);
+      toast.error('Failed to delete qualification');
+    }
+  };
+
+  // ============ VOLUNTEERING ============
+  const handleAddVolunteering = async () => {
+    if (!newVolunteering.title || !newVolunteering.organization) {
+      toast.error('Please fill in title and organization');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      const response = await apiClient.post('/profile/volunteering', {
+        title: newVolunteering.title,
+        organization: newVolunteering.organization,
+        hours: newVolunteering.hours || '0'
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setUser(prev => ({
+        ...prev,
+        volunteering: [...(prev.volunteering || []), response.data.data]
+      }));
+      setNewVolunteering({ title: "", organization: "", hours: "" });
+      toast.success('Volunteering added!');
+    } catch (err) {
+      console.error('Error adding volunteering:', err);
+      toast.error(err.response?.data?.message || 'Failed to add volunteering');
+    }
+  };
+
+  const handleDeleteVolunteering = async (volId) => {
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      await apiClient.delete(`/profile/volunteering/${volId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser(prev => ({
+        ...prev,
+        volunteering: prev.volunteering.filter(v => v.id !== volId)
+      }));
+      toast.success('Volunteering deleted');
+    } catch (err) {
+      console.error('Error deleting volunteering:', err);
+      toast.error('Failed to delete volunteering');
+    }
+  };
+
+  // ============ AVAILABILITY ============
+  const handleAddAvailability = async () => {
+    if (!newAvailability.day || !newAvailability.start || !newAvailability.end) {
+      toast.error('Please fill in all availability fields');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      const response = await apiClient.post('/profile/availability', {
+        day: newAvailability.day,
+        start: newAvailability.start,
+        end: newAvailability.end
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      setUser(prev => ({
+        ...prev,
+        availability: [...(prev.availability || []), response.data.data]
+      }));
+      setNewAvailability({ day: "", start: "", end: "" });
+      toast.success('Availability added!');
+    } catch (err) {
+      console.error('Error adding availability:', err);
+      toast.error(err.response?.data?.message || 'Failed to add availability');
+    }
+  };
+
+  const handleDeleteAvailability = async (availId) => {
+    try {
+      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      await apiClient.delete(`/profile/availability/${availId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUser(prev => ({
+        ...prev,
+        availability: prev.availability.filter(a => a.id !== availId)
+      }));
+      toast.success('Availability deleted');
+    } catch (err) {
+      console.error('Error deleting availability:', err);
+      toast.error('Failed to delete availability');
     }
   };
 
@@ -362,18 +460,15 @@ export default function Profile() {
                   )}
                 </div>
                 {isEditing && (
-                  <>
-                    <label className="absolute bottom-0 right-0 p-1.5 bg-[#00B330] rounded-full text-white cursor-pointer hover:bg-[#009f2b] transition-colors shadow-lg">
-                      <Camera className="w-4 h-4" />
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleProfilePhotoUpload}
-                      />
-                    </label>
-                    <p className="text-[10px] text-gray-400 text-center mt-1">Tap to change</p>
-                  </>
+                  <label className="absolute bottom-0 right-0 p-1.5 bg-[#00B330] rounded-full text-white cursor-pointer hover:bg-[#009f2b] transition-colors shadow-lg">
+                    <Camera className="w-4 h-4" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleProfilePhotoUpload}
+                    />
+                  </label>
                 )}
               </div>
               <div className="flex-1 text-center md:text-left">
