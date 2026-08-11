@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
 const fs = require('fs');
+const path = require('path');
 
 // Import redis
 const redis = require('./config/redis');
@@ -39,8 +40,10 @@ const PORT = process.env.PORT || 5000;
 // ============================================
 
 // Create uploads directory if it doesn't exist
-if (!fs.existsSync('uploads')) {
-  fs.mkdirSync('uploads', { recursive: true });
+const uploadDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+  console.log('📁 Uploads directory created');
 }
 
 // ============================================
@@ -87,7 +90,7 @@ app.use(hidePoweredBy);
 app.use(generalLimiter);
 
 // Serve static files from uploads directory
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(uploadDir));
 
 // ============================================
 // ROUTES
