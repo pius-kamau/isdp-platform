@@ -39,7 +39,6 @@ model User {
   isActive     Boolean  @default(true)
   emailVerified Boolean @default(false)
   phoneVerified Boolean @default(false)
-  // 2FA Fields
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret  String?
   twoFactorBackup  DateTime?
@@ -59,6 +58,10 @@ model User {
   messagesReceived Message[] @relation("receivedMessages")
   notifications Notification[]
   recoveryCodes  RecoveryCode[]
+  experience    UserExperience[]
+  qualifications UserQualification[]
+  volunteering  UserVolunteering[]
+  availability  UserAvailability[]
 
   @@index([email])
   @@index([phone])
@@ -190,4 +193,61 @@ model Notification {
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
+}
+
+model UserExperience {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  company   String
+  years     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model UserQualification {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  issuer    String
+  year      String
+  fileUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model UserVolunteering {
+  id           String   @id @default(cuid())
+  userId       String
+  title        String
+  organization String
+  hours        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model UserAvailability {
+  id        String   @id @default(cuid())
+  userId    String
+  day       String
+  start     String
+  end       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }

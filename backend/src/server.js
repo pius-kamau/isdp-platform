@@ -6,6 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
+const profileRoutes = require('./routes/profile.routes');
 
 // Import redis
 const redis = require('./config/redis');
@@ -94,6 +95,7 @@ const adminRoutes = require('./routes/admin.routes');
 const testRoutes = require('./routes/test.routes');
 const docsRoutes = require('./routes/docs.routes');
 
+
 // Health check endpoint (exempt from rate limiting)
 app.get('/api/health', (req, res) => {
   res.json({
@@ -136,6 +138,7 @@ app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Welcome endpoint
 app.get('/', (req, res) => {
