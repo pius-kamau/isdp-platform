@@ -7,11 +7,11 @@ import {
   FileText, Upload, Calendar,
   Star, Users
 } from "lucide-react";
-import { useDropzone } from 'react-dropzone';
 import apiClient from "../services/auth.service";
 import Sidebar from "../components/Sidebar";
 import BottomNav from "../components/BottomNav";
 import toast from 'react-hot-toast';
+import { COUNTIES, SUB_COUNTIES } from "../data/counties";
 
 export default function Profile() {
   const { id } = useParams();
@@ -38,19 +38,6 @@ export default function Profile() {
   const [newQualification, setNewQualification] = useState({ name: "", issuer: "", year: "", file: null });
   const [newVolunteering, setNewVolunteering] = useState({ title: "", organization: "", hours: "" });
   const [newAvailability, setNewAvailability] = useState({ day: "", start: "", end: "" });
-
-  // Dropzone for certifications
-  const { getRootProps, getInputProps } = useDropzone({
-    accept: {
-      'application/pdf': ['.pdf'],
-      'image/*': ['.png', '.jpg', '.jpeg']
-    },
-    maxSize: 5242880,
-    onDrop: (acceptedFiles) => {
-      setNewQualification({ ...newQualification, file: acceptedFiles[0] });
-      toast.success('File ready for upload!');
-    }
-  });
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -151,19 +138,39 @@ export default function Profile() {
       toast.error('Please enter a skill name');
       return;
     }
+
     try {
       const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
       
-      const skillResponse = await apiClient.post("/skills", {
-        name: newSkill.trim(),
-        category: "General"
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      const skillId = skillResponse.data.data.id;
-      
-      await apiClient.post("/skills/user", {
+      let skillId;
+      let skillName = newSkill.trim();
+      try {
+        const skillResponse = await apiClient.post("/skills", {
+          name: skillName,
+          category: "General"
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        skillId = skillResponse.data.data.id;
+      } catch (createError) {
+        if (createError.response?.data?.message === "Skill already exists") {
+          const skillsResponse = await apiClient.get("/skills", {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const existingSkill = skillsResponse.data.data.find(
+            s => s.name.toLowerCase() === skillName.toLowerCase()
+          );
+          if (existingSkill) {
+            skillId = existingSkill.id;
+          } else {
+            throw createError;
+          }
+        } else {
+          throw createError;
+        }
+      }
+
+      const response = await apiClient.post("/skills/user", {
         skillId: skillId,
         proficiencyLevel: "intermediate",
         yearsExperience: 0,
@@ -172,11 +179,27 @@ export default function Profile() {
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+
+      const newSkillObj = {
+        id: response.data.data.id,
+        skillId: skillId,
+        skill: {
+          id: skillId,
+          name: skillName,
+          category: "General"
+        },
+        proficiencyLevel: "intermediate",
+        yearsExperience: 0,
+        isMentor: false,
+        isVolunteer: false,
+        verificationStatus: "pending"
+      };
+
+      setUser(prev => ({
+        ...prev,
+        skills: [...(prev.skills || []), newSkillObj]
+      }));
       
-      const response = await apiClient.get(`/users/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUser(response.data.data);
       setNewSkill("");
       toast.success('Skill added!');
     } catch (err) {
@@ -193,10 +216,11 @@ export default function Profile() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      const response = await apiClient.get(`/users/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUser(response.data.data);
+      setUser(prev => ({
+        ...prev,
+        skills: prev.skills.filter(s => s.id !== skillId)
+      }));
+      
       toast.success('Skill removed');
     } catch (err) {
       console.error('Error removing skill:', err);
@@ -253,30 +277,57 @@ export default function Profile() {
 
   // ============ QUALIFICATIONS ============
   const handleAddQualification = async () => {
+    console.log('=== ADD QUALIFICATION ===');
+    console.log('newQualification:', newQualification);
+    
     if (!newQualification.name || !newQualification.issuer) {
       toast.error('Please fill in name and issuer');
       return;
     }
+    
     try {
       const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      
+      let fileUrl = null;
+      
+      if (newQualification.file) {
+        console.log('Uploading file:', newQualification.file);
+        const formData = new FormData();
+        formData.append('file', newQualification.file);
+        
+        const uploadResponse = await apiClient.post('/profile/upload', formData, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        });
+        
+        console.log('Upload response:', uploadResponse.data);
+        fileUrl = uploadResponse.data.data.fileUrl;
+      } else {
+        console.log('No file to upload');
+      }
       
       const response = await apiClient.post('/profile/qualification', {
         name: newQualification.name,
         issuer: newQualification.issuer,
         year: newQualification.year || '',
-        fileUrl: null
+        fileUrl: fileUrl
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      console.log('Qualification response:', response.data);
       
       setUser(prev => ({
         ...prev,
         qualifications: [...(prev.qualifications || []), response.data.data]
       }));
       setNewQualification({ name: "", issuer: "", year: "", file: null });
-      toast.success('Qualification added!');
+      toast.success('Qualification added successfully!');
     } catch (err) {
       console.error('Error adding qualification:', err);
+      console.error('Error response:', err.response);
       toast.error(err.response?.data?.message || 'Failed to add qualification');
     }
   };
@@ -551,23 +602,34 @@ export default function Profile() {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">County</label>
-                  <input
+                  <select
                     name="county"
                     value={editForm.county}
                     onChange={handleEditChange}
-                    className="w-full p-2 border border-gray-200 rounded-lg focus:border-[#00B330] outline-none text-sm"
-                    placeholder="County"
-                  />
+                    className="w-full p-2 border border-gray-200 rounded-lg focus:border-[#00B330] outline-none text-sm bg-white"
+                  >
+                    <option value="">Select your county</option>
+                    {COUNTIES.map((county) => (
+                      <option key={county} value={county}>{county}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Sub-County</label>
-                  <input
+                  <select
                     name="subCounty"
                     value={editForm.subCounty}
                     onChange={handleEditChange}
-                    className="w-full p-2 border border-gray-200 rounded-lg focus:border-[#00B330] outline-none text-sm"
-                    placeholder="Sub-County"
-                  />
+                    className="w-full p-2 border border-gray-200 rounded-lg focus:border-[#00B330] outline-none text-sm bg-white"
+                    disabled={!editForm.county}
+                  >
+                    <option value="">
+                      {editForm.county ? 'Select your sub-county' : 'Select county first'}
+                    </option>
+                    {(SUB_COUNTIES[editForm.county] || []).map((subCounty) => (
+                      <option key={subCounty} value={subCounty}>{subCounty}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
               <div className="flex flex-wrap gap-4">
@@ -606,6 +668,7 @@ export default function Profile() {
                 <input
                   value={newSkill}
                   onChange={(e) => setNewSkill(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddSkill()}
                   className="px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
                   placeholder="Add skill..."
                 />
@@ -711,13 +774,13 @@ export default function Profile() {
                   value={newQualification.name}
                   onChange={(e) => setNewQualification({...newQualification, name: e.target.value})}
                   className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Qualification"
+                  placeholder="Qualification *"
                 />
                 <input
                   value={newQualification.issuer}
                   onChange={(e) => setNewQualification({...newQualification, issuer: e.target.value})}
                   className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Issuer"
+                  placeholder="Issuer *"
                 />
                 <input
                   value={newQualification.year}
@@ -726,17 +789,69 @@ export default function Profile() {
                   placeholder="Year"
                 />
                 <button
-                  onClick={handleAddQualification}
+                  onClick={() => {
+                    console.log('Add qualification button clicked');
+                    handleAddQualification();
+                  }}
                   className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
               </div>
-              
-              <div {...getRootProps()} className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center cursor-pointer hover:border-[#00B330] transition-colors">
-                <input {...getInputProps()} />
-                <Upload className="w-5 h-5 text-gray-400 mx-auto mb-1" />
-                <p className="text-xs text-gray-500">Upload certificate (PDF, PNG, JPG)</p>
+
+              {/* File Upload with Drag and Drop */}
+              <div 
+                className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                  newQualification.file ? 'border-[#00B330] bg-[#00B330]/5' : 'border-gray-300 hover:border-[#00B330]'
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.classList.add('border-[#00B330]', 'bg-[#00B330]/5');
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
+                  const files = e.dataTransfer.files;
+                  if (files && files.length > 0) {
+                    const file = files[0];
+                    console.log('File dropped:', file);
+                    setNewQualification({...newQualification, file: file});
+                    toast.success(`File selected: ${file.name}`);
+                  }
+                }}
+              >
+                <input
+                  type="file"
+                  id="certificate-upload"
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  className="hidden"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      const file = e.target.files[0];
+                      console.log('File selected via input:', file);
+                      setNewQualification({...newQualification, file: file});
+                      toast.success(`File selected: ${file.name}`);
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="certificate-upload"
+                  className="cursor-pointer block"
+                >
+                  <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Drag and drop or click to upload certificate</p>
+                  <p className="text-xs text-gray-400">PDF, PNG, JPG (Max 5MB)</p>
+                  {newQualification.file && (
+                    <p className="mt-2 text-sm text-[#00B330]">✅ {newQualification.file.name}</p>
+                  )}
+                </label>
               </div>
 
               {user.qualifications?.length > 0 ? (
@@ -750,6 +865,16 @@ export default function Profile() {
                         <h4 className="font-medium text-gray-900">{qual.name}</h4>
                         <p className="text-sm text-gray-600">{qual.issuer}</p>
                         <p className="text-xs text-gray-400">{qual.year}</p>
+                        {qual.fileUrl && (
+                          <a 
+                            href={qual.fileUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-xs text-[#00B330] hover:underline flex items-center gap-1 mt-1"
+                          >
+                            <FileText className="w-3 h-3" /> View Certificate
+                          </a>
+                        )}
                       </div>
                       <button
                         onClick={() => handleDeleteQualification(qual.id)}

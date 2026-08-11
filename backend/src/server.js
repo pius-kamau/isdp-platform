@@ -81,10 +81,9 @@ app.use(sanitizeInput);
 app.use(securityHeaders);
 app.use(hidePoweredBy);
 
-app.use(generalLimiter);
-
 // ============================================
-// SERVE UPLOADS - PUBLIC ACCESS FOR VIEWING
+// SERVE UPLOADS - PUBLIC ACCESS (NO AUTH)
+// This must come BEFORE the rate limiter to avoid blocking
 // ============================================
 
 console.log('📁 Serving uploads from:', uploadDir);
@@ -95,18 +94,19 @@ app.use('/uploads', express.static(uploadDir, {
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD');
+    // Set correct content type based on file extension
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline');
+    } else if (['.jpg', '.jpeg', '.png', '.gif'].includes(ext)) {
+      res.setHeader('Content-Type', `image/${ext.replace('.', '')}`);
+    }
   }
 }));
 
-// Add a simple route to check if uploads are accessible
-app.get('/api/uploads/test', (req, res) => {
-  res.json({
-    status: 'success',
-    message: 'Uploads are being served',
-    uploadDir: uploadDir,
-    files: fs.readdirSync(uploadDir).filter(f => !f.startsWith('.'))
-  });
-});
+// Apply rate limiting AFTER static files
+app.use(generalLimiter);
 
 // ============================================
 // ROUTES
@@ -181,8 +181,7 @@ app.get('/', (req, res) => {
       admin: '/api/admin',
       test: '/api/test',
       profile: '/api/profile',
-      uploads: '/uploads (static files)',
-      'uploads-test': '/api/uploads/test'
+      uploads: '/uploads (static files - public)'
     },
   });
 });
@@ -210,7 +209,7 @@ const server = app.listen(PORT, () => {
   console.log(`URL: http://localhost:${PORT}`);
   console.log(`Health: http://localhost:${PORT}/api/health`);
   console.log(`Docs: http://localhost:${PORT}/api/docs`);
-  console.log(`Uploads: http://localhost:${PORT}/uploads`);
+  console.log(`Uploads (public): http://localhost:${PORT}/uploads`);
   console.log('='.repeat(50));
   console.log('Server started successfully');
 });
