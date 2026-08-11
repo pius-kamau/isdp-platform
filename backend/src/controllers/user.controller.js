@@ -2,271 +2,214 @@ const userModel = require('../models/user.model');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-class UserController {
-  // Register a new user
+const userController = {
+  // Register new user
   async register(req, res) {
     try {
-      const { fullName, email, phone, password, county, subCounty, bio, occupation } = req.body;
-
-      // Validate required fields
-      if (!fullName) {
-        return res.status(400).json({ message: 'Full name is required' });
+      const { email, password, fullName, phone } = req.body;
+      
+      const existingUser = await userModel.findByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'User already exists' 
+        });
       }
-      if (!password) {
-        return res.status(400).json({ message: 'Password is required' });
-      }
-      if (!county) {
-        return res.status(400).json({ message: 'County is required' });
-      }
-
-      // Check if email already exists
-      if (email) {
-        const existingEmail = await userModel.findByEmail(email);
-        if (existingEmail) {
-          return res.status(400).json({ message: 'Email already registered' });
-        }
-      }
-
-      // Check if phone already exists
-      if (phone) {
-        const existingPhone = await userModel.findByPhone(phone);
-        if (existingPhone) {
-          return res.status(400).json({ message: 'Phone number already registered' });
-        }
-      }
-
-      // Hash password
-      const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash(password, salt);
-
-      // Create user
+      
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
       const user = await userModel.create({
-        fullName,
         email,
-        phone,
-        passwordHash,
-        county,
-        subCounty,
-        bio,
-        occupation,
+        password: hashedPassword,
+        fullName,
+        phone
       });
-
-      // Remove password from response
-      const { passwordHash: _, ...userData } = user;
-
-      res.status(201).json({
-        status: 'success',
-        message: 'User registered successfully',
-        data: userData,
+      
+      const { password: _, ...safeUser } = user;
+      res.status(201).json({ 
+        status: 'success', 
+        data: safeUser 
       });
     } catch (error) {
       console.error('Register error:', error);
-      res.status(500).json({
-        status: 'error',
-        message: 'Registration failed',
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
       });
     }
-  }
+  },
 
   // Login user
   async login(req, res) {
     try {
-      const { email, phone, password } = req.body;
-
-      // Validate input
-      if (!email && !phone) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Email or phone number is required',
-        });
-      }
-
-      if (!password) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Password is required',
-        });
-      }
-
-      // Find user by email or phone
-      let user;
-      if (email) {
-        user = await userModel.findByEmail(email);
-      } else if (phone) {
-        user = await userModel.findByPhone(phone);
-      }
-
+      const { email, password } = req.body;
+      
+      const user = await userModel.findByEmail(email);
       if (!user) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Invalid credentials',
+        return res.status(401).json({ 
+          status: 'error', 
+          message: 'Invalid credentials' 
         });
       }
-
-      // Check password
-      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-      if (!isPasswordValid) {
-        return res.status(401).json({
-          status: 'error',
-          message: 'Invalid credentials',
+      
+      const validPassword = await bcrypt.compare(password, user.password);
+      if (!validPassword) {
+        return res.status(401).json({ 
+          status: 'error', 
+          message: 'Invalid credentials' 
         });
       }
-
-      // Generate JWT token
+      
       const token = jwt.sign(
-        { id: user.id, email: user.email },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRE || '7d' }
+        { id: user.id, email: user.email, role: user.role },
+        process.env.JWT_SECRET || 'your-secret-key',
+        { expiresIn: '7d' }
       );
-
-      // Remove password from response
-      const { passwordHash, ...userData } = user;
-
-      res.json({
-        status: 'success',
-        message: 'Login successful',
-        data: {
-          user: userData,
-          token,
-        },
+      
+      const { password: _, ...safeUser } = user;
+      res.json({ 
+        status: 'success', 
+        data: { user: safeUser, token } 
       });
     } catch (error) {
       console.error('Login error:', error);
-      res.status(500).json({
-        status: 'error',
-        message: 'Login failed',
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
       });
     }
-  }
+  },
 
   // Get all users
   async getAll(req, res) {
     try {
       const users = await userModel.findAll();
-      res.json({
-        status: 'success',
-        count: users.length,
-        data: users,
-      });
+      const safeUsers = users.map(({ password, ...rest }) => rest);
+      res.json({ status: 'success', data: safeUsers });
     } catch (error) {
       console.error('Get all users error:', error);
-      res.status(500).json({
-        status: 'error',
-        message: 'Failed to fetch users',
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
       });
     }
-  }
+  },
 
-  // Get single user by ID
+  // Get single user
   async getOne(req, res) {
     try {
       const { id } = req.params;
+      
       const user = await userModel.findById(id);
-
       if (!user) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'User not found',
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'User not found' 
         });
       }
-
-      res.json({
-        status: 'success',
-        data: user,
-      });
+      
+      const { password, ...safeUser } = user;
+      res.json({ status: 'success', data: safeUser });
     } catch (error) {
       console.error('Get user error:', error);
-      res.status(500).json({
-        status: 'error',
-        message: 'Failed to fetch user',
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
       });
     }
-  }
+  },
 
   // Update user
   async update(req, res) {
     try {
       const { id } = req.params;
-      const { 
-        fullName, 
-        email, 
-        phone, 
-        county, 
-        subCounty, 
-        bio, 
-        occupation,
-        isMentor,
-        isVolunteer,
-        isVerified,
-        profilePhoto
-      } = req.body;
-
+      
+      console.log('=== UPDATE USER ===');
+      console.log('User ID:', id);
+      console.log('Request User ID:', req.userId);
+      console.log('Body:', req.body);
+      
       // Check if user exists
       const existingUser = await userModel.findById(id);
       if (!existingUser) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'User not found',
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'User not found' 
         });
       }
-
-      // Prepare update data
+      
+      // Check authorization
+      if (req.userId !== id) {
+        return res.status(403).json({ 
+          status: 'error', 
+          message: 'You can only update your own profile' 
+        });
+      }
+      
+      // Build update data
       const updateData = {};
-      if (fullName) updateData.fullName = fullName;
-      if (email !== undefined) updateData.email = email;
-      if (phone !== undefined) updateData.phone = phone;
-      if (county) updateData.county = county;
-      if (subCounty !== undefined) updateData.subCounty = subCounty;
+      const { fullName, bio, occupation, phone, county, subCounty, isMentor, isVolunteer, profilePhoto } = req.body;
+      
+      if (fullName !== undefined) updateData.fullName = fullName;
       if (bio !== undefined) updateData.bio = bio;
       if (occupation !== undefined) updateData.occupation = occupation;
+      if (phone !== undefined) updateData.phone = phone;
+      if (county !== undefined) updateData.county = county;
+      if (subCounty !== undefined) updateData.subCounty = subCounty;
       if (isMentor !== undefined) updateData.isMentor = isMentor;
       if (isVolunteer !== undefined) updateData.isVolunteer = isVolunteer;
-      if (isVerified !== undefined) updateData.isVerified = isVerified;
       if (profilePhoto !== undefined) updateData.profilePhoto = profilePhoto;
-
-      const user = await userModel.update(id, updateData);
-
-      res.json({
-        status: 'success',
-        message: 'User updated successfully',
-        data: user,
-      });
+      
+      console.log('Update data:', updateData);
+      
+      if (Object.keys(updateData).length === 0) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'No fields to update' 
+        });
+      }
+      
+      const updatedUser = await userModel.update(id, updateData);
+      
+      console.log('User updated successfully');
+      
+      const { password, ...safeUser } = updatedUser;
+      res.json({ status: 'success', data: safeUser });
     } catch (error) {
       console.error('Update user error:', error);
-      res.status(500).json({
-        status: 'error',
-        message: 'Failed to update user',
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message || 'Failed to update user' 
       });
     }
-  }
+  },
 
   // Delete user
   async delete(req, res) {
     try {
       const { id } = req.params;
-
-      const user = await userModel.findById(id);
-      if (!user) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'User not found',
+      
+      if (req.userId !== id) {
+        return res.status(403).json({ 
+          status: 'error', 
+          message: 'You can only delete your own account' 
         });
       }
-
+      
       await userModel.delete(id);
-
-      res.json({
-        status: 'success',
-        message: 'User deleted successfully',
+      
+      res.json({ 
+        status: 'success', 
+        message: 'User account deactivated' 
       });
     } catch (error) {
       console.error('Delete user error:', error);
-      res.status(500).json({
-        status: 'error',
-        message: 'Failed to delete user',
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
       });
     }
   }
-}
+};
 
-module.exports = new UserController();
+module.exports = userController;
