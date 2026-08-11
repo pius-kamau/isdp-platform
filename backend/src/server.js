@@ -6,7 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
-const profileRoutes = require('./routes/profile.routes');
+const fs = require('fs');
 
 // Import redis
 const redis = require('./config/redis');
@@ -33,6 +33,15 @@ const { cleanupQueue } = require('./jobs');
 // Create express app
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// ============================================
+// CREATE UPLOADS DIRECTORY
+// ============================================
+
+// Create uploads directory if it doesn't exist
+if (!fs.existsSync('uploads')) {
+  fs.mkdirSync('uploads', { recursive: true });
+}
 
 // ============================================
 // CONNECT TO REDIS
@@ -77,6 +86,9 @@ app.use(hidePoweredBy);
 // Rate limiting (applied to all requests except health check)
 app.use(generalLimiter);
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
+
 // ============================================
 // ROUTES
 // ============================================
@@ -94,7 +106,7 @@ const analyticsRoutes = require('./routes/analytics.routes');
 const adminRoutes = require('./routes/admin.routes');
 const testRoutes = require('./routes/test.routes');
 const docsRoutes = require('./routes/docs.routes');
-
+const profileRoutes = require('./routes/profile.routes');
 
 // Health check endpoint (exempt from rate limiting)
 app.get('/api/health', (req, res) => {
@@ -160,6 +172,7 @@ app.get('/', (req, res) => {
       analytics: '/api/analytics',
       admin: '/api/admin',
       test: '/api/test',
+      profile: '/api/profile',
     },
   });
 });
