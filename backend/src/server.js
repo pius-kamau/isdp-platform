@@ -39,7 +39,6 @@ const PORT = process.env.PORT || 5000;
 // CREATE UPLOADS DIRECTORY
 // ============================================
 
-// Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -50,53 +49,69 @@ if (!fs.existsSync(uploadDir)) {
 // CONNECT TO REDIS
 // ============================================
 
-// Connect to Redis on startup
 redis.connect();
-
-// Connect to email service
 mailService.connect();
 
 // ============================================
 // MIDDLEWARE
 // ============================================
 
-// Security headers
-app.use(helmet());
+// Trust proxy (for rate limiting behind reverse proxy)
+app.set('trust proxy', 1);
 
-// CORS
+app.use(helmet({
+  crossOriginResourcePolicy: false // Allow cross-origin access for uploads
+}));
+
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
   credentials: true,
 }));
 
-// Compression
 app.use(compression());
 
-// Logging
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Security middleware
 app.use(sanitizeInput);
 app.use(securityHeaders);
 app.use(hidePoweredBy);
 
-// Rate limiting (applied to all requests except health check)
 app.use(generalLimiter);
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static(uploadDir));
+// ============================================
+// SERVE UPLOADS - PUBLIC ACCESS FOR VIEWING
+// ============================================
+
+console.log('📁 Serving uploads from:', uploadDir);
+app.use('/uploads', express.static(uploadDir, {
+  maxAge: '1d',
+  setHeaders: (res, filePath) => {
+    // Allow all origins to view uploaded files
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD');
+  }
+}));
+
+// Add a simple route to check if uploads are accessible
+app.get('/api/uploads/test', (req, res) => {
+  res.json({
+    status: 'success',
+    message: 'Uploads are being served',
+    uploadDir: uploadDir,
+    files: fs.readdirSync(uploadDir).filter(f => !f.startsWith('.'))
+  });
+});
 
 // ============================================
 // ROUTES
 // ============================================
 
-// Import routes
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const skillRoutes = require('./routes/skill.routes');
@@ -111,7 +126,6 @@ const testRoutes = require('./routes/test.routes');
 const docsRoutes = require('./routes/docs.routes');
 const profileRoutes = require('./routes/profile.routes');
 
-// Health check endpoint (exempt from rate limiting)
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'success',
@@ -122,13 +136,8 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// API Documentation
 app.use('/api/docs', docsRoutes);
-
-// Apply stricter limits to auth routes
 app.use('/api/auth', authLimiter);
-
-// Apply API limiter to API routes
 app.use('/api/users', apiLimiter);
 app.use('/api/skills', apiLimiter);
 app.use('/api/search', apiLimiter);
@@ -137,11 +146,8 @@ app.use('/api/messages', apiLimiter);
 app.use('/api/notifications', apiLimiter);
 app.use('/api/recommendations', apiLimiter);
 app.use('/api/analytics', apiLimiter);
-
-// Apply admin limiter to admin routes
 app.use('/api/admin', adminLimiter);
 
-// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/skills', skillRoutes);
@@ -155,7 +161,6 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/profile', profileRoutes);
 
-// Welcome endpoint
 app.get('/', (req, res) => {
   res.json({
     name: 'ISDP API',
@@ -176,25 +181,15 @@ app.get('/', (req, res) => {
       admin: '/api/admin',
       test: '/api/test',
       profile: '/api/profile',
+      uploads: '/uploads (static files)',
+      'uploads-test': '/api/uploads/test'
     },
   });
 });
 
-// ============================================
-// ERROR HANDLING
-// ============================================
-
-// 404 handler - Route not found
 app.use(notFoundHandler);
-
-// Global error handler
 app.use(errorHandler);
 
-// ============================================
-// GRACEFUL SHUTDOWN
-// ============================================
-
-// Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
   await redis.disconnect();
@@ -207,10 +202,6 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-// ============================================
-// START SERVER
-// ============================================
-
 const server = app.listen(PORT, () => {
   console.log('='.repeat(50));
   console.log('ISDP Backend Server');
@@ -219,12 +210,10 @@ const server = app.listen(PORT, () => {
   console.log(`URL: http://localhost:${PORT}`);
   console.log(`Health: http://localhost:${PORT}/api/health`);
   console.log(`Docs: http://localhost:${PORT}/api/docs`);
+  console.log(`Uploads: http://localhost:${PORT}/uploads`);
   console.log('='.repeat(50));
   console.log('Server started successfully');
 });
 
-// Initialize Socket.IO
 initSocket(server);
-
-// Initialize background jobs
 scheduleCleanup(cleanupQueue);
