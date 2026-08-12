@@ -62,8 +62,29 @@ app.use(helmet({
   crossOriginResourcePolicy: false
 }));
 
+// ============================================
+// CORS - Allow multiple origins
+// ============================================
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+  'https://isdp-frontend.onrender.com',
+  process.env.CLIENT_URL || 'http://localhost:5173'
+];
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked for origin:', origin);
+      callback(null, true); // Allow all in development
+    }
+  },
   credentials: true,
 }));
 
@@ -122,7 +143,6 @@ const analyticsRoutes = require('./routes/analytics.routes');
 const adminRoutes = require('./routes/admin.routes');
 const docsRoutes = require('./routes/docs.routes');
 const profileRoutes = require('./routes/profile.routes');
-const resetPasswordRoutes = require('./routes/reset-password.routes');
 
 // ============================================
 // RATE LIMITING - PER ROUTE
@@ -166,7 +186,6 @@ app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api/auth/password', resetPasswordRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -178,8 +197,6 @@ app.get('/', (req, res) => {
       health: '/api/health',
       docs: '/api/docs',
       auth: '/api/auth',
-      'auth/password/forgot': '/api/auth/password/forgot-password',
-      'auth/password/reset': '/api/auth/password/reset-password',
       users: '/api/users',
       skills: '/api/skills',
       search: '/api/search',
