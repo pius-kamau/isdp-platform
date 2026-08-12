@@ -32,16 +32,16 @@ router.post('/fix-password', async (req, res) => {
     }
     
     console.log('User found:', user.id);
-    console.log('Current password exists:', !!user.password);
+    console.log('Current passwordHash exists:', !!user.passwordHash);
     
     // Hash the new password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
-    // Update the user
+    // Update the user - using passwordHash field
     const updatedUser = await prisma.user.update({
       where: { email },
-      data: { password: hashedPassword }
+      data: { passwordHash: hashedPassword }
     });
     
     console.log('Password updated successfully');
