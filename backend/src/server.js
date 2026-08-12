@@ -1,3 +1,7 @@
+cd ~/isdp-platform/backend
+
+# Create a complete server.js with the fix-password route
+cat > src/server.js << 'EOF'
 // Load environment variables
 require('dotenv').config();
 
@@ -116,6 +120,7 @@ const adminRoutes = require('./routes/admin.routes');
 const testRoutes = require('./routes/test.routes');
 const docsRoutes = require('./routes/docs.routes');
 const profileRoutes = require('./routes/profile.routes');
+const fixPasswordRoutes = require('./routes/fix-password.routes'); // ADD THIS LINE
 
 // ============================================
 // TEST LOGIN ROUTE - INDEPENDENT
@@ -153,6 +158,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/test', testLoginRoutes); // Use test login routes
 app.use('/api/test-original', testRoutes); // Original test routes
 app.use('/api/profile', profileRoutes);
+app.use('/api/fix', fixPasswordRoutes); // ADD THIS LINE - FIX PASSWORD ROUTE
 
 app.get('/', (req, res) => {
   res.json({
@@ -173,6 +179,7 @@ app.get('/', (req, res) => {
       analytics: '/api/analytics',
       admin: '/api/admin',
       test: '/api/test/test-login (independent login)',
+      'fix-password': '/api/fix/fix-password',
       profile: '/api/profile',
       uploads: '/uploads (static files - public)'
     },
@@ -204,9 +211,11 @@ const server = app.listen(PORT, () => {
   console.log(`Docs: http://localhost:${PORT}/api/docs`);
   console.log(`Uploads (public): http://localhost:${PORT}/uploads`);
   console.log(`Test Login: http://localhost:${PORT}/api/test/test-login`);
+  console.log(`Fix Password: http://localhost:${PORT}/api/fix/fix-password`);
   console.log('='.repeat(50));
   console.log('Server started successfully');
 });
 
 initSocket(server);
 scheduleCleanup(cleanupQueue);
+EOF
