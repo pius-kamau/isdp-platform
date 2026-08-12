@@ -6,17 +6,20 @@ const { authenticate } = require('../middleware/auth.middleware');
 // All mentorship routes require authentication
 router.use(authenticate);
 
-// Request routes
-router.post('/request', mentorshipController.requestMentor);
-router.get('/me', mentorshipController.getMyRequests);
-router.get('/:id', mentorshipController.getRequest);
-router.put('/:id/accept', mentorshipController.acceptRequest);
-router.put('/:id/reject', mentorshipController.rejectRequest);
-router.delete('/:id', mentorshipController.deleteRequest);
+// ============ MENTORSHIP REQUESTS ============
+router.post('/requests', mentorshipController.createRequest);
+router.get('/requests', mentorshipController.getRequests);
+router.put('/requests/:id', mentorshipController.updateRequest);
 
-// Session routes
+// ============ MENTORSHIP SESSIONS ============
 router.post('/sessions', mentorshipController.createSession);
-router.get('/sessions/me', mentorshipController.getMySessions);
+router.get('/sessions', mentorshipController.getSessions);
 router.put('/sessions/:id', mentorshipController.updateSession);
+
+// ============ MENTORSHIP SEARCH ============
+router.get('/search', mentorshipController.searchMentors);
+
+// ============ MENTORSHIP STATS ============
+router.get('/stats', mentorshipController.getStats);
 
 module.exports = router;
