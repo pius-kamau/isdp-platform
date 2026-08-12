@@ -271,35 +271,42 @@ const authController = {
       const { email } = req.body;
 
       console.log('=== FORGOT PASSWORD ===');
-      console.log('Email:', email);
+      console.log('Email received:', email);
+      console.log('Request body:', req.body);
 
       if (!email) {
+        console.log('No email provided');
         return res.status(400).json({
           status: 'error',
           message: 'Email is required'
         });
       }
 
+      console.log('Looking for user with email:', email);
+
       const user = await prisma.user.findUnique({
         where: { email }
       });
 
+      console.log('User found:', user ? 'Yes - ' + user.id : 'No');
+
       if (!user) {
-        console.log('User not found:', email);
+        console.log('User not found, returning success message');
         return res.json({
           status: 'success',
           message: 'If your email is registered, you will receive a password reset link'
         });
       }
 
-      console.log('User found:', user.id);
+      console.log('Generating reset token for user:', user.id);
 
       const resetToken = crypto.randomBytes(32).toString('hex');
       const resetTokenExpiry = new Date(Date.now() + 3600000);
 
       console.log('🔑 RESET TOKEN FOR ' + email + ' : ' + resetToken);
+      console.log('Token expiry:', resetTokenExpiry);
 
-      await prisma.user.update({
+      const updatedUser = await prisma.user.update({
         where: { id: user.id },
         data: {
           resetPasswordToken: resetToken,
@@ -307,12 +314,15 @@ const authController = {
         }
       });
 
+      console.log('User updated with token:', updatedUser.id);
+
       res.json({
         status: 'success',
         message: 'If your email is registered, you will receive a password reset link'
       });
     } catch (error) {
       console.error('Forgot password error:', error);
+      console.error('Error stack:', error.stack);
       res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to process request'
@@ -323,6 +333,10 @@ const authController = {
   async resetPassword(req, res) {
     try {
       const { token, newPassword } = req.body;
+
+      console.log('=== RESET PASSWORD ===');
+      console.log('Token received:', token ? token.substring(0, 10) + '...' : 'none');
+      console.log('New password length:', newPassword ? newPassword.length : 0);
 
       if (!token || !newPassword) {
         return res.status(400).json({
@@ -338,6 +352,8 @@ const authController = {
         });
       }
 
+      console.log('Looking for user with token...');
+
       const user = await prisma.user.findFirst({
         where: {
           resetPasswordToken: token,
@@ -348,11 +364,14 @@ const authController = {
       });
 
       if (!user) {
+        console.log('No user found with valid token');
         return res.status(400).json({
           status: 'error',
           message: 'Invalid or expired reset token'
         });
       }
+
+      console.log('User found:', user.id);
 
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(newPassword, salt);
