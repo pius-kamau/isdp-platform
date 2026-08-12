@@ -18,9 +18,6 @@ const mailService = require('./config/mail');
 // Import error handlers
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler.middleware');
 
-// Import rate limiters
-const { generalLimiter, authLimiter, apiLimiter, adminLimiter } = require('./middleware/rateLimiter.middleware');
-
 // Import security middleware
 const { sanitizeInput, securityHeaders, hidePoweredBy } = require('./middleware/security.middleware');
 
@@ -56,11 +53,10 @@ mailService.connect();
 // MIDDLEWARE
 // ============================================
 
-// Trust proxy (for rate limiting behind reverse proxy)
 app.set('trust proxy', 1);
 
 app.use(helmet({
-  crossOriginResourcePolicy: false // Allow cross-origin access for uploads
+  crossOriginResourcePolicy: false
 }));
 
 app.use(cors({
@@ -82,19 +78,16 @@ app.use(securityHeaders);
 app.use(hidePoweredBy);
 
 // ============================================
-// SERVE UPLOADS - PUBLIC ACCESS (NO AUTH)
-// This must come BEFORE the rate limiter to avoid blocking
+// SERVE UPLOADS - PUBLIC ACCESS
 // ============================================
 
 console.log('📁 Serving uploads from:', uploadDir);
 app.use('/uploads', express.static(uploadDir, {
   maxAge: '1d',
   setHeaders: (res, filePath) => {
-    // Allow all origins to view uploaded files
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD');
-    // Set correct content type based on file extension
     const ext = path.extname(filePath).toLowerCase();
     if (ext === '.pdf') {
       res.setHeader('Content-Type', 'application/pdf');
@@ -105,13 +98,11 @@ app.use('/uploads', express.static(uploadDir, {
   }
 }));
 
-// Apply rate limiting AFTER static files
-app.use(generalLimiter);
-
 // ============================================
 // ROUTES
 // ============================================
 
+// Import routes
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const skillRoutes = require('./routes/skill.routes');
@@ -126,6 +117,17 @@ const testRoutes = require('./routes/test.routes');
 const docsRoutes = require('./routes/docs.routes');
 const profileRoutes = require('./routes/profile.routes');
 
+// ============================================
+// TEST LOGIN ROUTE - INDEPENDENT
+// ============================================
+console.log('✅ Loading test login route...');
+const testLoginRoutes = require('./routes/test-login.routes');
+console.log('✅ Test login route loaded');
+
+// ============================================
+// REGISTER ROUTES
+// ============================================
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'success',
@@ -136,18 +138,8 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Register routes
 app.use('/api/docs', docsRoutes);
-app.use('/api/auth', authLimiter);
-app.use('/api/users', apiLimiter);
-app.use('/api/skills', apiLimiter);
-app.use('/api/search', apiLimiter);
-app.use('/api/mentorship', apiLimiter);
-app.use('/api/messages', apiLimiter);
-app.use('/api/notifications', apiLimiter);
-app.use('/api/recommendations', apiLimiter);
-app.use('/api/analytics', apiLimiter);
-app.use('/api/admin', adminLimiter);
-
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/skills', skillRoutes);
@@ -158,7 +150,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/test', testRoutes);
+app.use('/api/test', testLoginRoutes); // Use test login routes
+app.use('/api/test-original', testRoutes); // Original test routes
 app.use('/api/profile', profileRoutes);
 
 app.get('/', (req, res) => {
@@ -179,7 +172,7 @@ app.get('/', (req, res) => {
       recommendations: '/api/recommendations',
       analytics: '/api/analytics',
       admin: '/api/admin',
-      test: '/api/test',
+      test: '/api/test/test-login (independent login)',
       profile: '/api/profile',
       uploads: '/uploads (static files - public)'
     },
@@ -210,6 +203,7 @@ const server = app.listen(PORT, () => {
   console.log(`Health: http://localhost:${PORT}/api/health`);
   console.log(`Docs: http://localhost:${PORT}/api/docs`);
   console.log(`Uploads (public): http://localhost:${PORT}/uploads`);
+  console.log(`Test Login: http://localhost:${PORT}/api/test/test-login`);
   console.log('='.repeat(50));
   console.log('Server started successfully');
 });
