@@ -33,7 +33,7 @@ const authController = {
       const user = await prisma.user.create({
         data: {
           email,
-          passwordHash: hashedPassword,  // Using passwordHash
+          passwordHash: hashedPassword,
           fullName,
           phone: phone || null,
           emailVerified: false,
@@ -91,7 +91,6 @@ const authController = {
         });
       }
 
-      // Check if passwordHash exists
       if (!user.passwordHash) {
         console.log('User has no password set:', email);
         return res.status(401).json({
@@ -100,7 +99,6 @@ const authController = {
         });
       }
 
-      // Verify password against passwordHash
       const isValid = await bcrypt.compare(password, user.passwordHash);
       if (!isValid) {
         console.log('Invalid password for:', email);
@@ -112,7 +110,6 @@ const authController = {
 
       console.log('Password valid for:', email);
 
-      // Update last login
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -273,6 +270,9 @@ const authController = {
     try {
       const { email } = req.body;
 
+      console.log('=== FORGOT PASSWORD ===');
+      console.log('Email:', email);
+
       if (!email) {
         return res.status(400).json({
           status: 'error',
@@ -285,14 +285,19 @@ const authController = {
       });
 
       if (!user) {
+        console.log('User not found:', email);
         return res.json({
           status: 'success',
           message: 'If your email is registered, you will receive a password reset link'
         });
       }
 
+      console.log('User found:', user.id);
+
       const resetToken = crypto.randomBytes(32).toString('hex');
       const resetTokenExpiry = new Date(Date.now() + 3600000);
+
+      console.log('🔑 RESET TOKEN FOR ' + email + ' : ' + resetToken);
 
       await prisma.user.update({
         where: { id: user.id },
@@ -302,8 +307,6 @@ const authController = {
         }
       });
 
-      console.log('Password reset requested for:', email);
-
       res.json({
         status: 'success',
         message: 'If your email is registered, you will receive a password reset link'
@@ -312,7 +315,7 @@ const authController = {
       console.error('Forgot password error:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message || 'Failed to process request'
       });
     }
   },
@@ -357,7 +360,7 @@ const authController = {
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          passwordHash: hashedPassword,  // Using passwordHash
+          passwordHash: hashedPassword,
           resetPasswordToken: null,
           resetPasswordExpires: null
         }
@@ -373,7 +376,7 @@ const authController = {
       console.error('Reset password error:', error);
       res.status(500).json({
         status: 'error',
-        message: error.message
+        message: error.message || 'Failed to reset password'
       });
     }
   },
@@ -421,7 +424,7 @@ const authController = {
 
       await prisma.user.update({
         where: { id: userId },
-        data: { passwordHash: hashedPassword }  // Using passwordHash
+        data: { passwordHash: hashedPassword }
       });
 
       res.json({
