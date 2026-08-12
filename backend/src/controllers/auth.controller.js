@@ -272,7 +272,6 @@ const authController = {
 
       console.log('=== FORGOT PASSWORD ===');
       console.log('Email received:', email);
-      console.log('Request body:', req.body);
 
       if (!email) {
         console.log('No email provided');
@@ -282,13 +281,9 @@ const authController = {
         });
       }
 
-      console.log('Looking for user with email:', email);
-
       const user = await prisma.user.findUnique({
         where: { email }
       });
-
-      console.log('User found:', user ? 'Yes - ' + user.id : 'No');
 
       if (!user) {
         console.log('User not found, returning success message');
@@ -298,15 +293,14 @@ const authController = {
         });
       }
 
-      console.log('Generating reset token for user:', user.id);
+      console.log('User found:', user.id);
 
       const resetToken = crypto.randomBytes(32).toString('hex');
       const resetTokenExpiry = new Date(Date.now() + 3600000);
 
       console.log('🔑 RESET TOKEN FOR ' + email + ' : ' + resetToken);
-      console.log('Token expiry:', resetTokenExpiry);
 
-      const updatedUser = await prisma.user.update({
+      await prisma.user.update({
         where: { id: user.id },
         data: {
           resetPasswordToken: resetToken,
@@ -314,7 +308,17 @@ const authController = {
         }
       });
 
-      console.log('User updated with token:', updatedUser.id);
+      // ========== SEND EMAIL ==========
+      console.log('📧 Sending password reset email to:', email);
+      
+      try {
+        const mailService = require('../config/mail');
+        await mailService.sendPasswordResetEmail(email, resetToken);
+        console.log('✅ Password reset email sent to:', email);
+      } catch (emailError) {
+        console.error('❌ Failed to send email:', emailError.message);
+        // Don't fail the request if email fails
+      }
 
       res.json({
         status: 'success',
@@ -335,8 +339,7 @@ const authController = {
       const { token, newPassword } = req.body;
 
       console.log('=== RESET PASSWORD ===');
-      console.log('Token received:', token ? token.substring(0, 10) + '...' : 'none');
-      console.log('New password length:', newPassword ? newPassword.length : 0);
+      console.log('Token received:', token ? token.substring(0, 15) + '...' : 'none');
 
       if (!token || !newPassword) {
         return res.status(400).json({
@@ -510,4 +513,3 @@ const authController = {
 };
 
 module.exports = authController;
-// DEPLOYMENT_MARKER_v2
