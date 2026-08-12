@@ -81,7 +81,7 @@ app.use(securityHeaders);
 app.use(hidePoweredBy);
 
 // ============================================
-// RATE LIMITING (RE-ENABLED)
+// RATE LIMITING
 // ============================================
 app.use(generalLimiter);
 
@@ -107,10 +107,9 @@ app.use('/uploads', express.static(uploadDir, {
 }));
 
 // ============================================
-// ROUTES
+// ROUTES IMPORTS
 // ============================================
 
-// Import routes
 const authRoutes = require('./routes/auth.routes');
 const userRoutes = require('./routes/user.routes');
 const skillRoutes = require('./routes/skill.routes');
@@ -123,11 +122,13 @@ const analyticsRoutes = require('./routes/analytics.routes');
 const adminRoutes = require('./routes/admin.routes');
 const docsRoutes = require('./routes/docs.routes');
 const profileRoutes = require('./routes/profile.routes');
+const resetPasswordRoutes = require('./routes/reset-password.routes');
 
-// Apply stricter limits to auth routes
+// ============================================
+// RATE LIMITING - PER ROUTE
+// ============================================
+
 app.use('/api/auth', authLimiter);
-
-// Apply API limiter to API routes
 app.use('/api/users', apiLimiter);
 app.use('/api/skills', apiLimiter);
 app.use('/api/search', apiLimiter);
@@ -153,7 +154,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Register routes
 app.use('/api/docs', docsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -166,6 +166,7 @@ app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/reset-password', resetPasswordRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -187,6 +188,7 @@ app.get('/', (req, res) => {
       analytics: '/api/analytics',
       admin: '/api/admin',
       profile: '/api/profile',
+      'reset-password': '/api/reset-password (one-time use)',
       uploads: '/uploads (static files - public)'
     },
   });
@@ -228,6 +230,7 @@ const server = app.listen(PORT, () => {
   console.log(`Health: http://localhost:${PORT}/api/health`);
   console.log(`Docs: http://localhost:${PORT}/api/docs`);
   console.log(`Uploads (public): http://localhost:${PORT}/uploads`);
+  console.log(`Reset Password: http://localhost:${PORT}/api/reset-password`);
   console.log('='.repeat(50));
   console.log('Server started successfully');
 });
