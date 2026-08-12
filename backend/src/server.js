@@ -1,7 +1,3 @@
-cd ~/isdp-platform/backend
-
-# Create a complete server.js with the fix-password route
-cat > src/server.js << 'EOF'
 // Load environment variables
 require('dotenv').config();
 
@@ -120,7 +116,7 @@ const adminRoutes = require('./routes/admin.routes');
 const testRoutes = require('./routes/test.routes');
 const docsRoutes = require('./routes/docs.routes');
 const profileRoutes = require('./routes/profile.routes');
-const fixPasswordRoutes = require('./routes/fix-password.routes'); // ADD THIS LINE
+const fixPasswordRoutes = require('./routes/fix-password.routes');
 
 // ============================================
 // TEST LOGIN ROUTE - INDEPENDENT
@@ -155,10 +151,10 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/test', testLoginRoutes); // Use test login routes
-app.use('/api/test-original', testRoutes); // Original test routes
+app.use('/api/test', testLoginRoutes);
+app.use('/api/test-original', testRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api/fix', fixPasswordRoutes); // ADD THIS LINE - FIX PASSWORD ROUTE
+app.use('/api/fix', fixPasswordRoutes);
 
 app.get('/', (req, res) => {
   res.json({
@@ -218,4 +214,3 @@ const server = app.listen(PORT, () => {
 
 initSocket(server);
 scheduleCleanup(cleanupQueue);
-EOF
