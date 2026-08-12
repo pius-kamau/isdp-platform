@@ -268,38 +268,46 @@ const authController = {
 
   async forgotPassword(req, res) {
     try {
+      console.log('🚀 FORGOT PASSWORD FUNCTION STARTED');
+      console.log('📝 Request body:', req.body);
+      
       const { email } = req.body;
 
-      console.log('=== FORGOT PASSWORD ===');
-      console.log('Email received:', email);
+      console.log('📧 Email received:', email);
 
       if (!email) {
-        console.log('No email provided');
+        console.log('❌ No email provided');
         return res.status(400).json({
           status: 'error',
           message: 'Email is required'
         });
       }
 
+      console.log('🔍 Looking for user with email:', email);
+
       const user = await prisma.user.findUnique({
         where: { email }
       });
 
+      console.log('👤 User found:', user ? 'Yes - ' + user.id : 'No');
+
       if (!user) {
-        console.log('User not found, returning success message');
+        console.log('❌ User not found, returning success message');
         return res.json({
           status: 'success',
           message: 'If your email is registered, you will receive a password reset link'
         });
       }
 
-      console.log('User found:', user.id);
+      console.log('🔑 Generating reset token for user:', user.id);
 
       const resetToken = crypto.randomBytes(32).toString('hex');
       const resetTokenExpiry = new Date(Date.now() + 3600000);
 
-      console.log('🔑 RESET TOKEN FOR ' + email + ' : ' + resetToken);
+      console.log('🔑 RESET TOKEN:', resetToken);
+      console.log('⏰ Token expiry:', resetTokenExpiry);
 
+      console.log('💾 Saving token to database...');
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -307,26 +315,33 @@ const authController = {
           resetPasswordExpires: resetTokenExpiry
         }
       });
+      console.log('✅ Token saved to database');
 
       // ========== SEND EMAIL ==========
       console.log('📧 Sending password reset email to:', email);
       
       try {
+        console.log('📧 Loading mail service...');
         const mailService = require('../config/mail');
-        await mailService.sendPasswordResetEmail(email, resetToken);
+        console.log('📧 Mail service loaded, sending email...');
+        
+        const result = await mailService.sendPasswordResetEmail(email, resetToken);
+        console.log('📧 Email send result:', result);
         console.log('✅ Password reset email sent to:', email);
       } catch (emailError) {
         console.error('❌ Failed to send email:', emailError.message);
+        console.error('❌ Email error stack:', emailError.stack);
         // Don't fail the request if email fails
       }
 
+      console.log('✅ Forgot password completed successfully');
       res.json({
         status: 'success',
         message: 'If your email is registered, you will receive a password reset link'
       });
     } catch (error) {
-      console.error('Forgot password error:', error);
-      console.error('Error stack:', error.stack);
+      console.error('❌ Forgot password error:', error);
+      console.error('❌ Error stack:', error.stack);
       res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to process request'
