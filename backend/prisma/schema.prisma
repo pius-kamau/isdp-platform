@@ -48,6 +48,14 @@ model User {
   updatedAt    DateTime @updatedAt
   deletedAt    DateTime?
 
+  // Password reset fields
+  resetPasswordToken   String?   @unique
+  resetPasswordExpires DateTime?
+  
+  // Email verification fields
+  emailVerificationToken   String?   @unique
+  emailVerificationExpires DateTime?
+
   // Relationships
   skills UserSkill[]
   mentorshipRequestsMentee  MentorRequest[] @relation("menteeRequests")
