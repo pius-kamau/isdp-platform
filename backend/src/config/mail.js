@@ -1,7 +1,13 @@
 const { TransactionalEmailsApi, SendSmtpEmail } = require('@sendinblue/client');
 const fs = require('fs');
 const path = require('path');
-const logger = require('./logger');
+
+// Simple logger that uses console
+const logger = {
+  info: (...args) => console.log(...args),
+  warn: (...args) => console.warn(...args),
+  error: (...args) => console.error(...args),
+};
 
 class MailService {
   constructor() {
@@ -14,39 +20,64 @@ class MailService {
 
   async connect() {
     try {
+      console.log('📧 Initializing Brevo email service...');
+      console.log('📧 API Key present:', !!this.apiKey);
+      console.log('📧 Sender Email:', this.senderEmail);
+      
       if (!this.apiKey) {
-        logger.warn('⚠️ Brevo API key not configured. Emails will be logged.');
+        console.log('⚠️ Brevo API key not configured. Emails will be logged.');
         return;
       }
 
       this.client = new TransactionalEmailsApi();
       this.client.setApiKey(0, this.apiKey);
       this.isConfigured = true;
-      logger.info('✅ Brevo email service connected successfully');
+      console.log('✅ Brevo email service connected successfully');
     } catch (error) {
-      logger.warn('⚠️ Brevo email connection failed:', error.message);
+      console.error('❌ Brevo email connection failed:', error.message);
       this.isConfigured = false;
     }
   }
 
-  // Helper to load and render template
   renderTemplate(templateName, variables) {
-    const templatePath = path.join(__dirname, '../templates', templateName);
-    let html = fs.readFileSync(templatePath, 'utf8');
-    
-    // Replace all {{key}} with values
-    for (const [key, value] of Object.entries(variables)) {
-      html = html.replace(new RegExp(`{{${key}}}`, 'g'), value);
+    try {
+      const templatePath = path.join(__dirname, '../templates', templateName);
+      
+      // Check if template exists
+      if (!fs.existsSync(templatePath)) {
+        console.log('⚠️ Template not found:', templatePath);
+        // Return a simple HTML template
+        return `
+          <h1>Reset Your Password</h1>
+          <p>Click the link below to reset your password:</p>
+          <a href="${variables.resetUrl}">${variables.resetUrl}</a>
+          <p>This link will expire in 1 hour.</p>
+        `;
+      }
+      
+      let html = fs.readFileSync(templatePath, 'utf8');
+      
+      for (const [key, value] of Object.entries(variables)) {
+        html = html.replace(new RegExp(`{{${key}}}`, 'g'), value);
+      }
+      
+      return html;
+    } catch (error) {
+      console.error('Template render error:', error);
+      return `<p>Reset your password: <a href="${variables.resetUrl}">${variables.resetUrl}</a></p>`;
     }
-    
-    return html;
   }
 
   async sendEmail({ to, subject, html, text }) {
+    console.log('📧 sendEmail called');
+    console.log('📧 To:', to);
+    console.log('📧 Subject:', subject);
+    console.log('📧 Configured:', this.isConfigured);
+
     // If not configured, just log
     if (!this.isConfigured || !this.client) {
-      logger.info(`📧 Email would be sent to ${to}: ${subject}`);
-      logger.info(`Email content: ${html || text}`);
+      console.log(`📧 Email would be sent to ${to}: ${subject}`);
+      console.log(`📧 Email content preview:`, (html || text || '').substring(0, 200));
       return { messageId: 'mock-id', status: 'logged' };
     }
 
@@ -61,11 +92,16 @@ class MailService {
       sendSmtpEmail.htmlContent = html || text || '';
       sendSmtpEmail.textContent = text || html ? html.replace(/<[^>]*>/g, '') : '';
 
+      console.log('📧 Sending email via Brevo...');
       const response = await this.client.sendTransacEmail(sendSmtpEmail);
-      logger.info(`📧 Email sent successfully to ${to}: ${subject}`);
+      console.log(`✅ Email sent successfully to ${to}: ${subject}`);
+      console.log('📧 Message ID:', response.messageId);
       return response;
     } catch (error) {
-      logger.error('Email send error:', error.message);
+      console.error('❌ Email send error:', error.message);
+      if (error.response) {
+        console.error('❌ Brevo API error:', error.response.body);
+      }
       throw error;
     }
   }
@@ -87,7 +123,9 @@ class MailService {
 
   // Send password reset email
   async sendPasswordResetEmail(email, token) {
+    console.log('📧 sendPasswordResetEmail called for:', email);
     const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+    console.log('📧 Reset URL:', resetUrl);
     
     const html = this.renderTemplate('password-reset.html', {
       resetUrl,
@@ -111,10 +149,16 @@ class MailService {
 
     return this.sendEmail({
       to: email,
-      subject: 'Welcome to ISDP ',
+      subject: 'Welcome to ISDP',
       html,
     });
   }
 }
 
-module.exports = new MailService();
+// Create singleton instance
+const mailService = new MailService();
+
+// Connect immediately
+mailService.connect();
+
+module.exports = mailService;
