@@ -166,7 +166,7 @@ app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api/reset-password', resetPasswordRoutes);
+app.use('/api/auth/password', resetPasswordRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -178,6 +178,8 @@ app.get('/', (req, res) => {
       health: '/api/health',
       docs: '/api/docs',
       auth: '/api/auth',
+      'auth/password/forgot': '/api/auth/password/forgot-password',
+      'auth/password/reset': '/api/auth/password/reset-password',
       users: '/api/users',
       skills: '/api/skills',
       search: '/api/search',
@@ -188,7 +190,6 @@ app.get('/', (req, res) => {
       analytics: '/api/analytics',
       admin: '/api/admin',
       profile: '/api/profile',
-      'reset-password': '/api/reset-password (one-time use)',
       uploads: '/uploads (static files - public)'
     },
   });
@@ -230,7 +231,6 @@ const server = app.listen(PORT, () => {
   console.log(`Health: http://localhost:${PORT}/api/health`);
   console.log(`Docs: http://localhost:${PORT}/api/docs`);
   console.log(`Uploads (public): http://localhost:${PORT}/uploads`);
-  console.log(`Reset Password: http://localhost:${PORT}/api/reset-password`);
   console.log('='.repeat(50));
   console.log('Server started successfully');
 });
