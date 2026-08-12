@@ -18,6 +18,9 @@ const mailService = require('./config/mail');
 // Import error handlers
 const { notFoundHandler, errorHandler } = require('./middleware/errorHandler.middleware');
 
+// Import rate limiters
+const { generalLimiter, authLimiter, apiLimiter, adminLimiter } = require('./middleware/rateLimiter.middleware');
+
 // Import security middleware
 const { sanitizeInput, securityHeaders, hidePoweredBy } = require('./middleware/security.middleware');
 
@@ -78,6 +81,11 @@ app.use(securityHeaders);
 app.use(hidePoweredBy);
 
 // ============================================
+// RATE LIMITING (RE-ENABLED)
+// ============================================
+app.use(generalLimiter);
+
+// ============================================
 // SERVE UPLOADS - PUBLIC ACCESS
 // ============================================
 
@@ -113,22 +121,28 @@ const notificationRoutes = require('./routes/notification.routes');
 const recommendationRoutes = require('./routes/recommendation.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const adminRoutes = require('./routes/admin.routes');
-const testRoutes = require('./routes/test.routes');
 const docsRoutes = require('./routes/docs.routes');
 const profileRoutes = require('./routes/profile.routes');
-const fixPasswordRoutes = require('./routes/fix-password.routes');
 
-// ============================================
-// TEST LOGIN ROUTE - INDEPENDENT
-// ============================================
-console.log('✅ Loading test login route...');
-const testLoginRoutes = require('./routes/test-login.routes');
-console.log('✅ Test login route loaded');
+// Apply stricter limits to auth routes
+app.use('/api/auth', authLimiter);
+
+// Apply API limiter to API routes
+app.use('/api/users', apiLimiter);
+app.use('/api/skills', apiLimiter);
+app.use('/api/search', apiLimiter);
+app.use('/api/mentorship', apiLimiter);
+app.use('/api/messages', apiLimiter);
+app.use('/api/notifications', apiLimiter);
+app.use('/api/recommendations', apiLimiter);
+app.use('/api/analytics', apiLimiter);
+app.use('/api/admin', adminLimiter);
 
 // ============================================
 // REGISTER ROUTES
 // ============================================
 
+// Health check (exempt from rate limiting)
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'success',
@@ -151,11 +165,9 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/recommendations', recommendationRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/test', testLoginRoutes);
-app.use('/api/test-original', testRoutes);
 app.use('/api/profile', profileRoutes);
-app.use('/api/fix', fixPasswordRoutes);
 
+// Root endpoint
 app.get('/', (req, res) => {
   res.json({
     name: 'ISDP API',
@@ -174,16 +186,22 @@ app.get('/', (req, res) => {
       recommendations: '/api/recommendations',
       analytics: '/api/analytics',
       admin: '/api/admin',
-      test: '/api/test/test-login (independent login)',
-      'fix-password': '/api/fix/fix-password',
       profile: '/api/profile',
       uploads: '/uploads (static files - public)'
     },
   });
 });
 
+// ============================================
+// ERROR HANDLING
+// ============================================
+
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+// ============================================
+// GRACEFUL SHUTDOWN
+// ============================================
 
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
@@ -197,6 +215,10 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
+// ============================================
+// START SERVER
+// ============================================
+
 const server = app.listen(PORT, () => {
   console.log('='.repeat(50));
   console.log('ISDP Backend Server');
@@ -206,8 +228,6 @@ const server = app.listen(PORT, () => {
   console.log(`Health: http://localhost:${PORT}/api/health`);
   console.log(`Docs: http://localhost:${PORT}/api/docs`);
   console.log(`Uploads (public): http://localhost:${PORT}/uploads`);
-  console.log(`Test Login: http://localhost:${PORT}/api/test/test-login`);
-  console.log(`Fix Password: http://localhost:${PORT}/api/fix/fix-password`);
   console.log('='.repeat(50));
   console.log('Server started successfully');
 });
