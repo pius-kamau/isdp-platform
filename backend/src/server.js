@@ -9,9 +9,6 @@ const profileRoutes = require('./routes/profile.routes');
 const messageRoutes = require('./routes/message.routes');
 const adminRoutes = require('./routes/admin.routes');
 const skillRoutes = require('./routes/skill.routes');
-// const uploadRoutes = require('./routes/upload.routes'); // REMOVED - file doesn't exist
-const adminSetupRoutes = require('./routes/admin-setup.routes');
-const adminPermanentRoutes = require('./routes/admin-permanent.routes');
 const { PrismaClient } = require('@prisma/client');
 const { initializeBrevo } = require('./services/email.service');
 
@@ -81,9 +78,6 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/skills', skillRoutes);
-// app.use('/api/upload', uploadRoutes); // REMOVED - file doesn't exist
-app.use('/api/admin-setup', adminSetupRoutes);
-app.use('/api/admin-permanent', adminPermanentRoutes);
 
 // ============ HEALTH CHECK ============
 app.get('/api/health', (req, res) => {
