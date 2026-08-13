@@ -6,13 +6,19 @@ const { authenticate } = require('../middleware/auth.middleware');
 // All message routes require authentication
 router.use(authenticate);
 
-// Message routes
-router.post('/', messageController.sendMessage);
-router.get('/conversations', messageController.getMyConversations);
+// Get all conversations
+router.get('/conversations', messageController.getConversations);
+
+// Get unread count
 router.get('/unread', messageController.getUnreadCount);
-router.get('/:userId', messageController.getConversation);
-router.put('/:userId/read', messageController.markAsRead);
-router.get('/message/:id', messageController.getMessage);
-router.delete('/:id', messageController.deleteMessage);
+
+// Get messages with a specific user
+router.get('/:userId', messageController.getMessages);
+
+// Send a message
+router.post('/', messageController.sendMessage);
+
+// Mark a message as read
+router.put('/:id/read', messageController.markAsRead);
 
 module.exports = router;
