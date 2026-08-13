@@ -8,9 +8,8 @@ const userRoutes = require('./routes/user.routes');
 const profileRoutes = require('./routes/profile.routes');
 const messageRoutes = require('./routes/message.routes');
 const adminRoutes = require('./routes/admin.routes');
-// const mentorRoutes = require('./routes/mentor.routes'); // REMOVED - file doesn't exist
 const skillRoutes = require('./routes/skill.routes');
-const uploadRoutes = require('./routes/upload.routes');
+// const uploadRoutes = require('./routes/upload.routes'); // REMOVED - file doesn't exist
 const adminSetupRoutes = require('./routes/admin-setup.routes');
 const adminPermanentRoutes = require('./routes/admin-permanent.routes');
 const { PrismaClient } = require('@prisma/client');
@@ -36,10 +35,8 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    // Check if the origin matches any allowed pattern
     const isAllowed = allowedOrigins.some(pattern => {
       if (pattern.includes('*')) {
         const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
@@ -52,7 +49,7 @@ app.use(cors({
       callback(null, true);
     } else {
       console.log('CORS blocked for origin:', origin);
-      callback(null, true); // Allow all for now (temporary)
+      callback(null, true);
     }
   },
   credentials: true,
@@ -68,14 +65,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ============ STATIC FILES ============
-// Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
   console.log('📁 Uploads directory created');
 }
 
-// Serve static files from uploads directory
 app.use('/uploads', express.static(uploadsDir));
 console.log(`📁 Serving uploads from: ${uploadsDir}`);
 
@@ -85,9 +80,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
-// app.use('/api/mentors', mentorRoutes); // REMOVED - file doesn't exist
 app.use('/api/skills', skillRoutes);
-app.use('/api/upload', uploadRoutes);
+// app.use('/api/upload', uploadRoutes); // REMOVED - file doesn't exist
 app.use('/api/admin-setup', adminSetupRoutes);
 app.use('/api/admin-permanent', adminPermanentRoutes);
 
@@ -111,7 +105,6 @@ app.get('/', (req, res) => {
       messages: '/api/messages',
       admin: '/api/admin',
       skills: '/api/skills',
-      upload: '/api/upload',
       health: '/api/health'
     }
   });
@@ -129,7 +122,6 @@ app.use((err, req, res, next) => {
 // ============ START SERVER ============
 async function startServer() {
   try {
-    // Initialize email service
     try {
       await initializeBrevo();
     } catch (emailError) {
@@ -148,7 +140,6 @@ async function startServer() {
   }
 }
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
   await prisma.$disconnect();
