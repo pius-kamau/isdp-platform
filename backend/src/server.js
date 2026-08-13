@@ -8,7 +8,7 @@ const userRoutes = require('./routes/user.routes');
 const profileRoutes = require('./routes/profile.routes');
 const messageRoutes = require('./routes/message.routes');
 const adminRoutes = require('./routes/admin.routes');
-const mentorRoutes = require('./routes/mentor.routes');
+// const mentorRoutes = require('./routes/mentor.routes'); // REMOVED - file doesn't exist
 const skillRoutes = require('./routes/skill.routes');
 const uploadRoutes = require('./routes/upload.routes');
 const adminSetupRoutes = require('./routes/admin-setup.routes');
@@ -53,7 +53,6 @@ app.use(cors({
     } else {
       console.log('CORS blocked for origin:', origin);
       callback(null, true); // Allow all for now (temporary)
-      // callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
@@ -86,7 +85,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/mentors', mentorRoutes);
+// app.use('/api/mentors', mentorRoutes); // REMOVED - file doesn't exist
 app.use('/api/skills', skillRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/admin-setup', adminSetupRoutes);
@@ -111,7 +110,6 @@ app.get('/', (req, res) => {
       profile: '/api/profile',
       messages: '/api/messages',
       admin: '/api/admin',
-      mentors: '/api/mentors',
       skills: '/api/skills',
       upload: '/api/upload',
       health: '/api/health'
