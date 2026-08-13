@@ -5,7 +5,7 @@ import {
   Edit2, Save, X, Clock, Award, Heart, 
   Plus, Trash2, GraduationCap, Sparkles, Camera,
   FileText, Upload, Calendar,
-  Star, Users
+  Star, Users, MessageCircle
 } from "lucide-react";
 import apiClient from "../services/auth.service";
 import Sidebar from "../components/Sidebar";
@@ -21,6 +21,9 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const [isOwnProfile, setIsOwnProfile] = useState(false);
+  
+  console.log('isEditing state:', isEditing);
   
   const [editForm, setEditForm] = useState({
     fullName: "",
@@ -44,11 +47,21 @@ export default function Profile() {
       try {
         setLoading(true);
         const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+        
+        // Get current user info from stored data
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const currentUserId = storedUser.id;
+        
+        // Get profile user
         const response = await apiClient.get(`/users/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const userData = response.data.data;
         setUser(userData);
+        
+        // Check if this is the current user's profile
+        setIsOwnProfile(currentUserId === id);
+        
         setEditForm({
           fullName: userData.fullName || "",
           bio: userData.bio || "",
@@ -62,6 +75,9 @@ export default function Profile() {
       } catch (err) {
         console.error("Error fetching user:", err);
         setError("Failed to load profile");
+        if (err.response?.status === 401) {
+          navigate('/login');
+        }
       } finally {
         setLoading(false);
       }
@@ -70,7 +86,7 @@ export default function Profile() {
     if (id) {
       fetchUser();
     }
-  }, [id]);
+  }, [id, navigate]);
 
   const handleEditChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -100,6 +116,12 @@ export default function Profile() {
       setUser(response.data.data);
       setIsEditing(false);
       toast.success('Profile updated successfully!');
+      
+      // Update stored user data
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const updatedUser = { ...storedUser, ...updateData };
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
     } catch (err) {
       console.error('Error saving profile:', err);
       toast.error(err.response?.data?.message || 'Failed to update profile');
@@ -444,6 +466,11 @@ export default function Profile() {
     }
   };
 
+  // ============ SEND MESSAGE ============
+  const handleSendMessage = () => {
+    navigate(`/messages?userId=${id}`);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
@@ -487,15 +514,30 @@ export default function Profile() {
             <button onClick={() => navigate(-1)} className="p-1 hover:bg-gray-100 rounded-lg">
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </button>
-            <h1 className="text-lg md:text-xl font-semibold text-gray-900">Profile</h1>
+            <h1 className="text-lg md:text-xl font-semibold text-gray-900">
+              {isOwnProfile ? 'My Profile' : `${user.fullName?.split(' ')[0] || 'User'}'s Profile`}
+            </h1>
           </div>
-          <button
-            onClick={() => setIsEditing(!isEditing)}
-            className="flex items-center gap-2 px-4 py-2 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b] transition-colors"
-          >
-            {isEditing ? <X className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-            {isEditing ? "Cancel" : "Edit Profile"}
-          </button>
+          <div className="flex items-center gap-2">
+            {!isOwnProfile && (
+              <button
+                onClick={handleSendMessage}
+                className="flex items-center gap-2 px-4 py-2 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b] transition-colors"
+              >
+                <MessageCircle className="w-4 h-4" />
+                Message
+              </button>
+            )}
+            {isOwnProfile && (
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b] transition-colors"
+              >
+                {isEditing ? <X className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                {isEditing ? "Cancel" : "Edit Profile"}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 px-4 py-4 md:px-8 md:py-6 max-w-4xl mx-auto w-full space-y-4">
@@ -510,7 +552,7 @@ export default function Profile() {
                     user.fullName?.charAt(0) || "U"
                   )}
                 </div>
-                {isEditing && (
+                {isEditing && isOwnProfile && (
                   <label className="absolute bottom-0 right-0 p-1.5 bg-[#00B330] rounded-full text-white cursor-pointer hover:bg-[#009f2b] transition-colors shadow-lg">
                     <Camera className="w-4 h-4" />
                     <input
@@ -523,7 +565,7 @@ export default function Profile() {
                 )}
               </div>
               <div className="flex-1 text-center md:text-left">
-                {isEditing ? (
+                {isEditing && isOwnProfile ? (
                   <input
                     name="fullName"
                     value={editForm.fullName}
@@ -533,7 +575,7 @@ export default function Profile() {
                 ) : (
                   <h2 className="text-xl md:text-2xl font-semibold text-gray-900">{user.fullName}</h2>
                 )}
-                {isEditing ? (
+                {isEditing && isOwnProfile ? (
                   <input
                     name="occupation"
                     value={editForm.occupation}
@@ -571,7 +613,7 @@ export default function Profile() {
                 <span className="text-xs text-gray-400">(24 reviews)</span>
               </div>
             </div>
-            {isEditing ? (
+            {isEditing && isOwnProfile ? (
               <textarea
                 name="bio"
                 value={editForm.bio}
@@ -585,8 +627,8 @@ export default function Profile() {
             ) : null}
           </div>
 
-          {/* Edit Mode - Quick Info */}
-          {isEditing && (
+          {/* Edit Mode - Quick Info (only for own profile) */}
+          {isEditing && isOwnProfile && (
             <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8 space-y-4">
               <h3 className="text-sm font-medium text-gray-900">Quick Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -657,28 +699,30 @@ export default function Profile() {
             </div>
           )}
 
-          {/* Skills */}
+          {/* Skills - Only show add button for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-[#00B330]" /> Skills
                 <span className="text-xs text-gray-400 font-normal">({user.skills?.length || 0})</span>
               </h3>
-              <div className="flex gap-2">
-                <input
-                  value={newSkill}
-                  onChange={(e) => setNewSkill(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddSkill()}
-                  className="px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Add skill..."
-                />
-                <button
-                  onClick={handleAddSkill}
-                  className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
+              {isOwnProfile && (
+                <div className="flex gap-2">
+                  <input
+                    value={newSkill}
+                    onChange={(e) => setNewSkill(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddSkill()}
+                    className="px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Add skill..."
+                  />
+                  <button
+                    onClick={handleAddSkill}
+                    className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               {user.skills?.length > 0 ? (
@@ -688,12 +732,14 @@ export default function Profile() {
                     className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm flex items-center gap-1"
                   >
                     {skill.skill?.name || "Skill"}
-                    <button
-                      onClick={() => handleRemoveSkill(skill.id)}
-                      className="text-gray-400 hover:text-red-500"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+                    {isOwnProfile && (
+                      <button
+                        onClick={() => handleRemoveSkill(skill.id)}
+                        className="text-gray-400 hover:text-red-500"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </span>
                 ))
               ) : (
@@ -702,39 +748,41 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Experience */}
+          {/* Experience - Only show add/delete for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Briefcase className="w-4 h-4 text-[#00B330]" /> Experience
               <span className="text-xs text-gray-400 font-normal">({user.experience?.length || 0})</span>
             </h3>
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <input
-                  value={newExperience.title}
-                  onChange={(e) => setNewExperience({...newExperience, title: e.target.value})}
-                  className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Title"
-                />
-                <input
-                  value={newExperience.company}
-                  onChange={(e) => setNewExperience({...newExperience, company: e.target.value})}
-                  className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Company"
-                />
-                <input
-                  value={newExperience.years}
-                  onChange={(e) => setNewExperience({...newExperience, years: e.target.value})}
-                  className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Years"
-                />
-                <button
-                  onClick={handleAddExperience}
-                  className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
+              {isOwnProfile && (
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    value={newExperience.title}
+                    onChange={(e) => setNewExperience({...newExperience, title: e.target.value})}
+                    className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Title"
+                  />
+                  <input
+                    value={newExperience.company}
+                    onChange={(e) => setNewExperience({...newExperience, company: e.target.value})}
+                    className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Company"
+                  />
+                  <input
+                    value={newExperience.years}
+                    onChange={(e) => setNewExperience({...newExperience, years: e.target.value})}
+                    className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Years"
+                  />
+                  <button
+                    onClick={handleAddExperience}
+                    className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               {user.experience?.length > 0 ? (
                 <div className="space-y-3">
                   {user.experience.map((exp) => (
@@ -747,12 +795,14 @@ export default function Profile() {
                         <p className="text-sm text-gray-600">{exp.company}</p>
                         <p className="text-xs text-gray-400">{exp.years} years</p>
                       </div>
-                      <button
-                        onClick={() => handleDeleteExperience(exp.id)}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isOwnProfile && (
+                        <button
+                          onClick={() => handleDeleteExperience(exp.id)}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -762,97 +812,101 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Qualifications */}
+          {/* Qualifications - Only show add/delete for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Award className="w-4 h-4 text-[#00B330]" /> Qualifications
               <span className="text-xs text-gray-400 font-normal">({user.qualifications?.length || 0})</span>
             </h3>
             <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <input
-                  value={newQualification.name}
-                  onChange={(e) => setNewQualification({...newQualification, name: e.target.value})}
-                  className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Qualification *"
-                />
-                <input
-                  value={newQualification.issuer}
-                  onChange={(e) => setNewQualification({...newQualification, issuer: e.target.value})}
-                  className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Issuer *"
-                />
-                <input
-                  value={newQualification.year}
-                  onChange={(e) => setNewQualification({...newQualification, year: e.target.value})}
-                  className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Year"
-                />
-                <button
-                  onClick={() => {
-                    console.log('Add qualification button clicked');
-                    handleAddQualification();
-                  }}
-                  className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
+              {isOwnProfile && (
+                <>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      value={newQualification.name}
+                      onChange={(e) => setNewQualification({...newQualification, name: e.target.value})}
+                      className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                      placeholder="Qualification *"
+                    />
+                    <input
+                      value={newQualification.issuer}
+                      onChange={(e) => setNewQualification({...newQualification, issuer: e.target.value})}
+                      className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                      placeholder="Issuer *"
+                    />
+                    <input
+                      value={newQualification.year}
+                      onChange={(e) => setNewQualification({...newQualification, year: e.target.value})}
+                      className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                      placeholder="Year"
+                    />
+                    <button
+                      onClick={() => {
+                        console.log('Add qualification button clicked');
+                        handleAddQualification();
+                      }}
+                      className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
 
-              {/* File Upload with Drag and Drop */}
-              <div 
-                className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-                  newQualification.file ? 'border-[#00B330] bg-[#00B330]/5' : 'border-gray-300 hover:border-[#00B330]'
-                }`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.currentTarget.classList.add('border-[#00B330]', 'bg-[#00B330]/5');
-                }}
-                onDragLeave={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
-                  const files = e.dataTransfer.files;
-                  if (files && files.length > 0) {
-                    const file = files[0];
-                    console.log('File dropped:', file);
-                    setNewQualification({...newQualification, file: file});
-                    toast.success(`File selected: ${file.name}`);
-                  }
-                }}
-              >
-                <input
-                  type="file"
-                  id="certificate-upload"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      const file = e.target.files[0];
-                      console.log('File selected via input:', file);
-                      setNewQualification({...newQualification, file: file});
-                      toast.success(`File selected: ${file.name}`);
-                    }
-                  }}
-                />
-                <label
-                  htmlFor="certificate-upload"
-                  className="cursor-pointer block"
-                >
-                  <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">Drag and drop or click to upload certificate</p>
-                  <p className="text-xs text-gray-400">PDF, PNG, JPG (Max 5MB)</p>
-                  {newQualification.file && (
-                    <p className="mt-2 text-sm text-[#00B330]">✅ {newQualification.file.name}</p>
-                  )}
-                </label>
-              </div>
+                  {/* File Upload with Drag and Drop */}
+                  <div 
+                    className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                      newQualification.file ? 'border-[#00B330] bg-[#00B330]/5' : 'border-gray-300 hover:border-[#00B330]'
+                    }`}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.currentTarget.classList.add('border-[#00B330]', 'bg-[#00B330]/5');
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
+                      const files = e.dataTransfer.files;
+                      if (files && files.length > 0) {
+                        const file = files[0];
+                        console.log('File dropped:', file);
+                        setNewQualification({...newQualification, file: file});
+                        toast.success(`File selected: ${file.name}`);
+                      }
+                    }}
+                  >
+                    <input
+                      type="file"
+                      id="certificate-upload"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0];
+                          console.log('File selected via input:', file);
+                          setNewQualification({...newQualification, file: file});
+                          toast.success(`File selected: ${file.name}`);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="certificate-upload"
+                      className="cursor-pointer block"
+                    >
+                      <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">Drag and drop or click to upload certificate</p>
+                      <p className="text-xs text-gray-400">PDF, PNG, JPG (Max 5MB)</p>
+                      {newQualification.file && (
+                        <p className="mt-2 text-sm text-[#00B330]">✅ {newQualification.file.name}</p>
+                      )}
+                    </label>
+                  </div>
+                </>
+              )}
 
               {user.qualifications?.length > 0 ? (
                 <div className="space-y-3">
@@ -867,7 +921,7 @@ export default function Profile() {
                         <p className="text-xs text-gray-400">{qual.year}</p>
                         {qual.fileUrl && (
                           <a 
-                            href={qual.fileUrl} 
+                            href={`https://isdp-backend.onrender.com${qual.fileUrl}`}
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className="text-xs text-[#00B330] hover:underline flex items-center gap-1 mt-1"
@@ -876,12 +930,14 @@ export default function Profile() {
                           </a>
                         )}
                       </div>
-                      <button
-                        onClick={() => handleDeleteQualification(qual.id)}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isOwnProfile && (
+                        <button
+                          onClick={() => handleDeleteQualification(qual.id)}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -891,39 +947,41 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Volunteering */}
+          {/* Volunteering - Only show add/delete for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Heart className="w-4 h-4 text-[#00B330]" /> Volunteering
               <span className="text-xs text-gray-400 font-normal">({user.volunteering?.length || 0})</span>
             </h3>
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <input
-                  value={newVolunteering.title}
-                  onChange={(e) => setNewVolunteering({...newVolunteering, title: e.target.value})}
-                  className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Opportunity"
-                />
-                <input
-                  value={newVolunteering.organization}
-                  onChange={(e) => setNewVolunteering({...newVolunteering, organization: e.target.value})}
-                  className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Organization"
-                />
-                <input
-                  value={newVolunteering.hours}
-                  onChange={(e) => setNewVolunteering({...newVolunteering, hours: e.target.value})}
-                  className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Hours"
-                />
-                <button
-                  onClick={handleAddVolunteering}
-                  className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
+              {isOwnProfile && (
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    value={newVolunteering.title}
+                    onChange={(e) => setNewVolunteering({...newVolunteering, title: e.target.value})}
+                    className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Opportunity"
+                  />
+                  <input
+                    value={newVolunteering.organization}
+                    onChange={(e) => setNewVolunteering({...newVolunteering, organization: e.target.value})}
+                    className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Organization"
+                  />
+                  <input
+                    value={newVolunteering.hours}
+                    onChange={(e) => setNewVolunteering({...newVolunteering, hours: e.target.value})}
+                    className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Hours"
+                  />
+                  <button
+                    onClick={handleAddVolunteering}
+                    className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               {user.volunteering?.length > 0 ? (
                 <div className="space-y-3">
                   {user.volunteering.map((vol) => (
@@ -936,12 +994,14 @@ export default function Profile() {
                         <p className="text-sm text-gray-600">{vol.organization}</p>
                         <p className="text-xs text-gray-400">{vol.hours} hours</p>
                       </div>
-                      <button
-                        onClick={() => handleDeleteVolunteering(vol.id)}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isOwnProfile && (
+                        <button
+                          onClick={() => handleDeleteVolunteering(vol.id)}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -951,47 +1011,49 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Availability */}
+          {/* Availability - Only show add/delete for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Clock className="w-4 h-4 text-[#00B330]" /> Availability
               <span className="text-xs text-gray-400 font-normal">({user.availability?.length || 0})</span>
             </h3>
             <div className="space-y-3">
-              <div className="flex flex-wrap gap-2">
-                <select
-                  value={newAvailability.day}
-                  onChange={(e) => setNewAvailability({...newAvailability, day: e.target.value})}
-                  className="px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                >
-                  <option value="">Day</option>
-                  <option value="Monday">Monday</option>
-                  <option value="Tuesday">Tuesday</option>
-                  <option value="Wednesday">Wednesday</option>
-                  <option value="Thursday">Thursday</option>
-                  <option value="Friday">Friday</option>
-                  <option value="Saturday">Saturday</option>
-                  <option value="Sunday">Sunday</option>
-                </select>
-                <input
-                  value={newAvailability.start}
-                  onChange={(e) => setNewAvailability({...newAvailability, start: e.target.value})}
-                  className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="Start"
-                />
-                <input
-                  value={newAvailability.end}
-                  onChange={(e) => setNewAvailability({...newAvailability, end: e.target.value})}
-                  className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                  placeholder="End"
-                />
-                <button
-                  onClick={handleAddAvailability}
-                  className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
+              {isOwnProfile && (
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    value={newAvailability.day}
+                    onChange={(e) => setNewAvailability({...newAvailability, day: e.target.value})}
+                    className="px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                  >
+                    <option value="">Day</option>
+                    <option value="Monday">Monday</option>
+                    <option value="Tuesday">Tuesday</option>
+                    <option value="Wednesday">Wednesday</option>
+                    <option value="Thursday">Thursday</option>
+                    <option value="Friday">Friday</option>
+                    <option value="Saturday">Saturday</option>
+                    <option value="Sunday">Sunday</option>
+                  </select>
+                  <input
+                    value={newAvailability.start}
+                    onChange={(e) => setNewAvailability({...newAvailability, start: e.target.value})}
+                    className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Start"
+                  />
+                  <input
+                    value={newAvailability.end}
+                    onChange={(e) => setNewAvailability({...newAvailability, end: e.target.value})}
+                    className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="End"
+                  />
+                  <button
+                    onClick={handleAddAvailability}
+                    className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               {user.availability?.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {user.availability.map((avail) => (
@@ -1001,12 +1063,14 @@ export default function Profile() {
                         <h4 className="font-medium text-gray-900 text-sm">{avail.day}</h4>
                         <p className="text-xs text-gray-500">{avail.start} - {avail.end}</p>
                       </div>
-                      <button
-                        onClick={() => handleDeleteAvailability(avail.id)}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isOwnProfile && (
+                        <button
+                          onClick={() => handleDeleteAvailability(avail.id)}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1016,14 +1080,16 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Save Button */}
-          {isEditing && (
-            <button
-              onClick={handleSave}
-              className="w-full py-3.5 bg-[#00B330] text-white rounded-xl font-medium hover:bg-[#009f2b] transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#00B330]/20"
-            >
-              <Save className="w-5 h-5" /> Save All Changes
-            </button>
+          {/* Save Button - Only for own profile */}
+          {isEditing && isOwnProfile && (
+            <div className="sticky bottom-0 pb-4 pt-2 bg-[#f7f8f7] z-10">
+              <button
+                onClick={handleSave}
+                className="w-full py-3.5 bg-[#00B330] text-white rounded-xl font-medium hover:bg-[#009f2b] transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#00B330]/20"
+              >
+                <Save className="w-5 h-5" /> Save All Changes
+              </button>
+            </div>
           )}
         </div>
       </div>

@@ -1,85 +1,116 @@
-import axios from "axios";
+import axios from 'axios';
 
-// Use environment variable or fallback to Render backend
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "https://isdp-backend.onrender.com/api";
+// API base URL
+const API_URL = import.meta.env.VITE_API_URL || 'https://isdp-backend.onrender.com/api';
 
-// Create axios instance
 const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to add token
-apiClient.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
+// Add token to requests if available
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
-);
+  return config;
+});
 
-// Response interceptor to handle token expiration
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      sessionStorage.removeItem("accessToken");
-      sessionStorage.removeItem("refreshToken");
-      window.location.href = "/login";
-    }
-    return Promise.reject(error);
-  }
-);
+// ============ AUTH FUNCTIONS ============
 
-// Auth functions
-export const registerUser = async (userData) => {
-  return apiClient.post("/auth/register", userData);
-};
-
+// Login user
 export const loginUser = async (credentials) => {
-  return apiClient.post("/auth/login", credentials);
-};
-
-export const forgotPassword = async (email) => {
-  return apiClient.post("/auth/forgot-password", { email });
-};
-
-export const verifyEmail = async (token) => {
-  return apiClient.post("/auth/verify-email", { token });
-};
-
-export const resetPassword = async (token, password) => {
-  return apiClient.post("/auth/reset-password", { token, password });
-};
-
-export const refreshToken = async (refreshTokenValue) => {
-  return apiClient.post("/auth/refresh-token", { refreshToken: refreshTokenValue });
-};
-
-export const logoutUser = async () => {
-  const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
-  return apiClient.post(
-    "/auth/logout",
-    {},
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+  try {
+    const response = await apiClient.post('/auth/login', credentials);
+    
+    // Store user data if available
+    if (response.data?.data?.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.data.user));
     }
-  );
+    
+    return response;
+  } catch (error) {
+    throw error;
+  }
 };
 
-// Export the apiClient for other API calls
+// Register user
+export const registerUser = async (userData) => {
+  try {
+    const response = await apiClient.post('/auth/register', userData);
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Forgot password - request reset link
+export const forgotPassword = async (email) => {
+  try {
+    const response = await apiClient.post('/auth/password/forgot-password', { email });
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Reset password with token
+export const resetPassword = async (token, newPassword) => {
+  try {
+    const response = await apiClient.post('/auth/password/reset-password', {
+      token,
+      newPassword
+    });
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Get current user
+export const getCurrentUser = async () => {
+  try {
+    const response = await apiClient.get('/users/me');
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Update user profile
+export const updateUser = async (userId, data) => {
+  try {
+    const response = await apiClient.put(`/users/${userId}`, data);
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Logout
+export const logoutUser = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  sessionStorage.removeItem('accessToken');
+  sessionStorage.removeItem('refreshToken');
+  sessionStorage.removeItem('user');
+};
+
+// Get stored user
+export const getStoredUser = () => {
+  try {
+    const userStr = localStorage.getItem('user') || sessionStorage.getItem('user');
+    if (userStr) {
+      return JSON.parse(userStr);
+    }
+  } catch (e) {
+    console.error('Error parsing stored user:', e);
+  }
+  return null;
+};
+
 export default apiClient;
