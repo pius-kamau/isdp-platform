@@ -21,4 +21,7 @@ router.post('/', messageController.sendMessage);
 // Mark a message as read
 router.put('/:id/read', messageController.markAsRead);
 
+// Clear all messages with a user
+router.delete('/clear/:userId', messageController.clearMessages);
+
 module.exports = router;

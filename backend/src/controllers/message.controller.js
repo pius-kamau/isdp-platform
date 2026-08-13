@@ -325,3 +325,52 @@ const messageController = {
 };
 
 module.exports = messageController;
+
+  // Clear all messages between two users
+  async clearMessages(req, res) {
+    try {
+      const userId = req.userId;
+      const { userId: otherUserId } = req.params;
+
+      console.log('=== CLEAR MESSAGES ===');
+      console.log('User:', userId);
+      console.log('Other User:', otherUserId);
+
+      if (!otherUserId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'User ID is required'
+        });
+      }
+
+      // Delete all messages between the two users
+      const deleted = await prisma.message.deleteMany({
+        where: {
+          OR: [
+            {
+              senderId: userId,
+              receiverId: otherUserId
+            },
+            {
+              senderId: otherUserId,
+              receiverId: userId
+            }
+          ]
+        }
+      });
+
+      console.log(`✅ Deleted ${deleted.count} messages`);
+
+      res.json({
+        status: 'success',
+        message: `Cleared ${deleted.count} messages`,
+        data: { deletedCount: deleted.count }
+      });
+    } catch (error) {
+      console.error('Clear messages error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to clear messages'
+      });
+    }
+  }
