@@ -3,7 +3,6 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const userController = {
-  // Register new user
   async register(req, res) {
     try {
       const { email, password, fullName, phone } = req.body;
@@ -20,12 +19,12 @@ const userController = {
       
       const user = await userModel.create({
         email,
-        password: hashedPassword,
+        passwordHash: hashedPassword,
         fullName,
         phone
       });
       
-      const { password: _, ...safeUser } = user;
+      const { passwordHash, ...safeUser } = user;
       res.status(201).json({ 
         status: 'success', 
         data: safeUser 
@@ -39,7 +38,6 @@ const userController = {
     }
   },
 
-  // Login user
   async login(req, res) {
     try {
       const { email, password } = req.body;
@@ -52,7 +50,7 @@ const userController = {
         });
       }
       
-      const validPassword = await bcrypt.compare(password, user.password);
+      const validPassword = await bcrypt.compare(password, user.passwordHash);
       if (!validPassword) {
         return res.status(401).json({ 
           status: 'error', 
@@ -66,10 +64,11 @@ const userController = {
         { expiresIn: '7d' }
       );
       
-      const { password: _, ...safeUser } = user;
+      const { passwordHash, ...safeUser } = user;
       res.json({ 
         status: 'success', 
-        data: { user: safeUser, token } 
+        message: 'Login successful',
+        data: { user: safeUser, accessToken: token } 
       });
     } catch (error) {
       console.error('Login error:', error);
@@ -80,11 +79,33 @@ const userController = {
     }
   },
 
-  // Get all users
+  async getMe(req, res) {
+    try {
+      const userId = req.userId;
+      
+      const user = await userModel.findById(userId);
+      if (!user) {
+        return res.status(404).json({ 
+          status: 'error', 
+          message: 'User not found' 
+        });
+      }
+      
+      const { passwordHash, ...safeUser } = user;
+      res.json({ status: 'success', data: safeUser });
+    } catch (error) {
+      console.error('Get me error:', error);
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
+      });
+    }
+  },
+
   async getAll(req, res) {
     try {
       const users = await userModel.findAll();
-      const safeUsers = users.map(({ password, ...rest }) => rest);
+      const safeUsers = users.map(({ passwordHash, ...rest }) => rest);
       res.json({ status: 'success', data: safeUsers });
     } catch (error) {
       console.error('Get all users error:', error);
@@ -95,7 +116,6 @@ const userController = {
     }
   },
 
-  // Get single user
   async getOne(req, res) {
     try {
       const { id } = req.params;
@@ -108,7 +128,7 @@ const userController = {
         });
       }
       
-      const { password, ...safeUser } = user;
+      const { passwordHash, ...safeUser } = user;
       res.json({ status: 'success', data: safeUser });
     } catch (error) {
       console.error('Get user error:', error);
@@ -119,7 +139,6 @@ const userController = {
     }
   },
 
-  // Update user
   async update(req, res) {
     try {
       const { id } = req.params;
@@ -129,7 +148,6 @@ const userController = {
       console.log('Request User ID:', req.userId);
       console.log('Body:', req.body);
       
-      // Check if user exists
       const existingUser = await userModel.findById(id);
       if (!existingUser) {
         return res.status(404).json({ 
@@ -138,7 +156,6 @@ const userController = {
         });
       }
       
-      // Check authorization
       if (req.userId !== id) {
         return res.status(403).json({ 
           status: 'error', 
@@ -146,7 +163,6 @@ const userController = {
         });
       }
       
-      // Build update data
       const updateData = {};
       const { fullName, bio, occupation, phone, county, subCounty, isMentor, isVolunteer, profilePhoto } = req.body;
       
@@ -173,7 +189,7 @@ const userController = {
       
       console.log('User updated successfully');
       
-      const { password, ...safeUser } = updatedUser;
+      const { passwordHash, ...safeUser } = updatedUser;
       res.json({ status: 'success', data: safeUser });
     } catch (error) {
       console.error('Update user error:', error);
@@ -184,7 +200,6 @@ const userController = {
     }
   },
 
-  // Delete user
   async delete(req, res) {
     try {
       const { id } = req.params;
