@@ -10,7 +10,6 @@ const messageRoutes = require('./routes/message.routes');
 const adminRoutes = require('./routes/admin.routes');
 const skillRoutes = require('./routes/skill.routes');
 const { PrismaClient } = require('@prisma/client');
-const { initializeBrevo } = require('./services/email.service');
 
 // Load environment variables
 dotenv.config();
@@ -20,46 +19,30 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 5000;
 
 // ============ CORS CONFIGURATION ============
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:5000',
-  'https://isdp-frontend.vercel.app',
-  'https://isdp-frontend-git-*.vercel.app',
-  'https://*.vercel.app',
-  'https://isdp-frontend-*.vercel.app'
-];
-
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    
-    const isAllowed = allowedOrigins.some(pattern => {
-      if (pattern.includes('*')) {
-        const regex = new RegExp('^' + pattern.replace(/\*/g, '.*') + '$');
-        return regex.test(origin);
-      }
-      return pattern === origin;
-    });
-    
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked for origin:', origin);
-      callback(null, true);
-    }
-  },
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'https://isdp-frontend.vercel.app',
+    'https://*.vercel.app'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
-// Handle preflight requests
 app.options('*', cors());
 
 // ============ MIDDLEWARE ============
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Log all requests
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
 
 // ============ STATIC FILES ============
 const uploadsDir = path.join(__dirname, '../uploads');
@@ -114,26 +97,14 @@ app.use((err, req, res, next) => {
 });
 
 // ============ START SERVER ============
-async function startServer() {
-  try {
-    try {
-      await initializeBrevo();
-    } catch (emailError) {
-      console.warn('⚠️ Email service initialization warning:', emailError.message);
-    }
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 API URL: http://localhost:${PORT}/api`);
+  console.log(`📁 Uploads directory: ${uploadsDir}`);
+});
 
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`🔗 API URL: http://localhost:${PORT}/api`);
-      console.log(`📁 Uploads directory: ${uploadsDir}`);
-    });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
-}
-
+// Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
   await prisma.$disconnect();
@@ -145,5 +116,3 @@ process.on('SIGTERM', async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
-
-startServer();
