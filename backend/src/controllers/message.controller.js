@@ -10,7 +10,6 @@ const messageController = {
       console.log('=== GET CONVERSATIONS ===');
       console.log('User ID:', userId);
 
-      // Get all messages where user is sender or receiver
       const messages = await prisma.message.findMany({
         where: {
           OR: [
@@ -41,7 +40,6 @@ const messageController = {
         }
       });
 
-      // Group messages by conversation
       const conversationMap = new Map();
 
       messages.forEach(msg => {
@@ -60,13 +58,11 @@ const messageController = {
         const conv = conversationMap.get(otherUserId);
         conv.messages.push(msg);
         
-        // Count unread messages
         if (msg.receiverId === userId && !msg.isRead) {
           conv.unreadCount += 1;
         }
       });
 
-      // Convert to array and sort by latest message
       const conversations = Array.from(conversationMap.values())
         .map(conv => ({
           ...conv,
@@ -112,7 +108,6 @@ const messageController = {
         });
       }
 
-      // Get messages between the two users
       const messages = await prisma.message.findMany({
         where: {
           OR: [
@@ -147,7 +142,6 @@ const messageController = {
         }
       });
 
-      // Mark messages as read
       await prisma.message.updateMany({
         where: {
           senderId: otherUserId,
@@ -184,7 +178,6 @@ const messageController = {
       console.log('=== SEND MESSAGE ===');
       console.log('Sender:', senderId);
       console.log('Receiver:', receiverId);
-      console.log('Message:', messageText);
 
       if (!receiverId || !messageText) {
         return res.status(400).json({
@@ -193,7 +186,6 @@ const messageController = {
         });
       }
 
-      // Check if receiver exists
       const receiver = await prisma.user.findUnique({
         where: { id: receiverId }
       });
@@ -205,7 +197,6 @@ const messageController = {
         });
       }
 
-      // Create the message
       const message = await prisma.message.create({
         data: {
           senderId,
@@ -256,7 +247,6 @@ const messageController = {
 
       console.log('=== MARK AS READ ===');
       console.log('Message ID:', id);
-      console.log('User:', userId);
 
       const message = await prisma.message.findUnique({
         where: { id }
@@ -269,7 +259,6 @@ const messageController = {
         });
       }
 
-      // Only receiver can mark as read
       if (message.receiverId !== userId) {
         return res.status(403).json({
           status: 'error',
@@ -321,10 +310,7 @@ const messageController = {
         message: error.message || 'Failed to get unread count'
       });
     }
-  }
-};
-
-module.exports = messageController;
+  },
 
   // Clear all messages between two users
   async clearMessages(req, res) {
@@ -343,7 +329,6 @@ module.exports = messageController;
         });
       }
 
-      // Delete all messages between the two users
       const deleted = await prisma.message.deleteMany({
         where: {
           OR: [
@@ -374,3 +359,6 @@ module.exports = messageController;
       });
     }
   }
+};
+
+module.exports = messageController;
