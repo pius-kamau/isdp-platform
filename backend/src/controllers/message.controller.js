@@ -299,6 +299,8 @@ const messageController = {
         }
       });
 
+      console.log('📬 Unread count for user:', userId, '=', count);
+
       res.json({
         status: 'success',
         data: { unreadCount: count }
