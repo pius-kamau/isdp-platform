@@ -5,13 +5,13 @@ import {
   Edit2, Save, X, Clock, Award, Heart, 
   Plus, Trash2, GraduationCap, Sparkles, Camera,
   FileText, Upload, Calendar,
-  Star, Users, MessageCircle
+  Star, Users, MessageCircle, Loader2
 } from "lucide-react";
-import apiClient from "../services/auth.service";
 import Sidebar from "../components/Sidebar";
 import BottomNav from "../components/BottomNav";
 import toast from 'react-hot-toast';
-import { COUNTIES, SUB_COUNTIES } from "../data/counties";
+
+const API_URL = 'https://isdp-backend.onrender.com/api';
 
 export default function Profile() {
   const { id } = useParams();
@@ -22,8 +22,6 @@ export default function Profile() {
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
-  
-  console.log('isEditing state:', isEditing);
   
   const [editForm, setEditForm] = useState({
     fullName: "",
@@ -43,24 +41,55 @@ export default function Profile() {
   const [newAvailability, setNewAvailability] = useState({ day: "", start: "", end: "" });
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-        
-        // Get current user info from stored data
-        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-        const currentUserId = storedUser.id;
-        
-        // Get profile user
-        const response = await apiClient.get(`/users/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const userData = response.data.data;
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+    
+    if (id) {
+      fetchUser(id);
+    }
+  }, [id, navigate]);
+
+  const fetchUser = async (userId) => {
+    setLoading(true);
+    setError("");
+    try {
+      const token = localStorage.getItem('accessToken');
+      
+      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+      const currentUserId = storedUser.id;
+      setIsOwnProfile(currentUserId === userId);
+      
+      console.log('Fetching user:', userId);
+      console.log('API_URL:', API_URL);
+      
+      const response = await fetch(`${API_URL}/users/${userId}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('Response status:', response.status);
+      
+      if (response.status === 401) {
+        localStorage.clear();
+        navigate('/login');
+        return;
+      }
+      
+      if (!response.ok) {
+        throw new Error(`Failed to load profile: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('User data:', data);
+      
+      if (data.status === 'success' && data.data) {
+        const userData = data.data;
         setUser(userData);
-        
-        // Check if this is the current user's profile
-        setIsOwnProfile(currentUserId === id);
         
         setEditForm({
           fullName: userData.fullName || "",
@@ -72,21 +101,16 @@ export default function Profile() {
           isMentor: userData.isMentor || false,
           isVolunteer: userData.isVolunteer || false,
         });
-      } catch (err) {
-        console.error("Error fetching user:", err);
-        setError("Failed to load profile");
-        if (err.response?.status === 401) {
-          navigate('/login');
-        }
-      } finally {
-        setLoading(false);
+      } else {
+        setError(data.message || "User not found");
       }
-    };
-
-    if (id) {
-      fetchUser();
+    } catch (err) {
+      console.error("Error fetching user:", err);
+      setError(err.message || "Failed to load profile");
+    } finally {
+      setLoading(false);
     }
-  }, [id, navigate]);
+  };
 
   const handleEditChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -98,7 +122,7 @@ export default function Profile() {
 
   const handleSave = async () => {
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const token = localStorage.getItem('accessToken');
       const updateData = {
         fullName: editForm.fullName,
         bio: editForm.bio,
@@ -110,21 +134,36 @@ export default function Profile() {
         isVolunteer: editForm.isVolunteer,
       };
       
-      const response = await apiClient.put(`/users/${id}`, updateData, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await fetch(`${API_URL}/users/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updateData)
       });
-      setUser(response.data.data);
-      setIsEditing(false);
-      toast.success('Profile updated successfully!');
       
-      // Update stored user data
-      const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-      const updatedUser = { ...storedUser, ...updateData };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      if (response.status === 401) {
+        localStorage.clear();
+        navigate('/login');
+        return;
+      }
       
+      const data = await response.json();
+      if (data.status === 'success') {
+        setUser(data.data);
+        setIsEditing(false);
+        toast.success('Profile updated successfully!');
+        
+        const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+        const updatedUser = { ...storedUser, ...updateData };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      } else {
+        toast.error(data.message || 'Failed to update profile');
+      }
     } catch (err) {
       console.error('Error saving profile:', err);
-      toast.error(err.response?.data?.message || 'Failed to update profile');
+      toast.error('Failed to update profile');
     }
   };
 
@@ -133,19 +172,27 @@ export default function Profile() {
     if (!file) return;
     
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const token = localStorage.getItem('accessToken');
       const reader = new FileReader();
       
       reader.onload = async (event) => {
-        setUser(prev => ({ ...prev, profilePhoto: event.target.result }));
+        const photoData = event.target.result;
+        setUser(prev => ({ ...prev, profilePhoto: photoData }));
         
-        await apiClient.put(`/users/${id}`, {
-          profilePhoto: event.target.result
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
+        const response = await fetch(`${API_URL}/users/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ profilePhoto: photoData })
         });
         
-        toast.success('Profile photo updated!');
+        if (response.ok) {
+          toast.success('Profile photo updated!');
+        } else {
+          toast.error('Failed to update photo');
+        }
       };
       reader.readAsDataURL(file);
     } catch (err) {
@@ -162,88 +209,108 @@ export default function Profile() {
     }
 
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
+      const token = localStorage.getItem('accessToken');
       let skillId;
-      let skillName = newSkill.trim();
-      try {
-        const skillResponse = await apiClient.post("/skills", {
-          name: skillName,
-          category: "General"
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        skillId = skillResponse.data.data.id;
-      } catch (createError) {
-        if (createError.response?.data?.message === "Skill already exists") {
-          const skillsResponse = await apiClient.get("/skills", {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          const existingSkill = skillsResponse.data.data.find(
-            s => s.name.toLowerCase() === skillName.toLowerCase()
-          );
-          if (existingSkill) {
-            skillId = existingSkill.id;
-          } else {
-            throw createError;
+      const skillName = newSkill.trim();
+      
+      let createResponse = await fetch(`${API_URL}/skills`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: skillName, category: "General" })
+      });
+      
+      if (createResponse.ok) {
+        const data = await createResponse.json();
+        skillId = data.data.id;
+      } else {
+        const searchResponse = await fetch(`${API_URL}/skills`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
           }
-        } else {
-          throw createError;
+        });
+        if (searchResponse.ok) {
+          const data = await searchResponse.json();
+          const existing = data.data.find(s => s.name.toLowerCase() === skillName.toLowerCase());
+          if (existing) {
+            skillId = existing.id;
+          } else {
+            toast.error('Failed to create skill');
+            return;
+          }
         }
       }
-
-      const response = await apiClient.post("/skills/user", {
-        skillId: skillId,
-        proficiencyLevel: "intermediate",
-        yearsExperience: 0,
-        isMentor: false,
-        isVolunteer: false
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      const newSkillObj = {
-        id: response.data.data.id,
-        skillId: skillId,
-        skill: {
-          id: skillId,
-          name: skillName,
-          category: "General"
-        },
-        proficiencyLevel: "intermediate",
-        yearsExperience: 0,
-        isMentor: false,
-        isVolunteer: false,
-        verificationStatus: "pending"
-      };
-
-      setUser(prev => ({
-        ...prev,
-        skills: [...(prev.skills || []), newSkillObj]
-      }));
       
-      setNewSkill("");
-      toast.success('Skill added!');
+      const addResponse = await fetch(`${API_URL}/skills/user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          skillId: skillId,
+          proficiencyLevel: "intermediate",
+          yearsExperience: 0,
+          isMentor: false,
+          isVolunteer: false
+        })
+      });
+      
+      if (addResponse.ok) {
+        const data = await addResponse.json();
+        const newSkillObj = {
+          id: data.data.id,
+          skillId: skillId,
+          skill: {
+            id: skillId,
+            name: skillName,
+            category: "General"
+          },
+          proficiencyLevel: "intermediate",
+          yearsExperience: 0,
+          isMentor: false,
+          isVolunteer: false,
+          verificationStatus: "pending"
+        };
+        
+        setUser(prev => ({
+          ...prev,
+          skills: [...(prev.skills || []), newSkillObj]
+        }));
+        setNewSkill("");
+        toast.success('Skill added!');
+      } else {
+        toast.error('Failed to add skill to profile');
+      }
     } catch (err) {
       console.error('Error adding skill:', err);
-      toast.error(err.response?.data?.message || 'Failed to add skill');
+      toast.error('Failed to add skill');
     }
   };
 
   const handleRemoveSkill = async (skillId) => {
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
-      await apiClient.delete(`/skills/user/${skillId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/skills/user/${skillId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
       
-      setUser(prev => ({
-        ...prev,
-        skills: prev.skills.filter(s => s.id !== skillId)
-      }));
-      
-      toast.success('Skill removed');
+      if (response.ok) {
+        setUser(prev => ({
+          ...prev,
+          skills: prev.skills.filter(s => s.id !== skillId)
+        }));
+        toast.success('Skill removed');
+      } else {
+        toast.error('Failed to remove skill');
+      }
     } catch (err) {
       console.error('Error removing skill:', err);
       toast.error('Failed to remove skill');
@@ -257,40 +324,57 @@ export default function Profile() {
       return;
     }
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
-      const response = await apiClient.post('/profile/experience', {
-        title: newExperience.title,
-        company: newExperience.company,
-        years: newExperience.years || '0'
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/profile/experience`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: newExperience.title,
+          company: newExperience.company,
+          years: newExperience.years || '0'
+        })
       });
       
-      setUser(prev => ({
-        ...prev,
-        experience: [...(prev.experience || []), response.data.data]
-      }));
-      setNewExperience({ title: "", company: "", years: "" });
-      toast.success('Experience added!');
+      if (response.ok) {
+        const data = await response.json();
+        setUser(prev => ({
+          ...prev,
+          experience: [...(prev.experience || []), data.data]
+        }));
+        setNewExperience({ title: "", company: "", years: "" });
+        toast.success('Experience added!');
+      } else {
+        toast.error('Failed to add experience');
+      }
     } catch (err) {
       console.error('Error adding experience:', err);
-      toast.error(err.response?.data?.message || 'Failed to add experience');
+      toast.error('Failed to add experience');
     }
   };
 
   const handleDeleteExperience = async (expId) => {
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
-      await apiClient.delete(`/profile/experience/${expId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/profile/experience/${expId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
-      setUser(prev => ({
-        ...prev,
-        experience: prev.experience.filter(e => e.id !== expId)
-      }));
-      toast.success('Experience deleted');
+      
+      if (response.ok) {
+        setUser(prev => ({
+          ...prev,
+          experience: prev.experience.filter(e => e.id !== expId)
+        }));
+        toast.success('Experience deleted');
+      } else {
+        toast.error('Failed to delete experience');
+      }
     } catch (err) {
       console.error('Error deleting experience:', err);
       toast.error('Failed to delete experience');
@@ -299,73 +383,82 @@ export default function Profile() {
 
   // ============ QUALIFICATIONS ============
   const handleAddQualification = async () => {
-    console.log('=== ADD QUALIFICATION ===');
-    console.log('newQualification:', newQualification);
-    
     if (!newQualification.name || !newQualification.issuer) {
       toast.error('Please fill in name and issuer');
       return;
     }
     
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
+      const token = localStorage.getItem('accessToken');
       let fileUrl = null;
       
       if (newQualification.file) {
-        console.log('Uploading file:', newQualification.file);
         const formData = new FormData();
         formData.append('file', newQualification.file);
         
-        const uploadResponse = await apiClient.post('/profile/upload', formData, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data'
-          }
+        const uploadResponse = await fetch(`${API_URL}/profile/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
         });
         
-        console.log('Upload response:', uploadResponse.data);
-        fileUrl = uploadResponse.data.data.fileUrl;
-      } else {
-        console.log('No file to upload');
+        if (uploadResponse.ok) {
+          const data = await uploadResponse.json();
+          fileUrl = data.data.fileUrl;
+        }
       }
       
-      const response = await apiClient.post('/profile/qualification', {
-        name: newQualification.name,
-        issuer: newQualification.issuer,
-        year: newQualification.year || '',
-        fileUrl: fileUrl
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await fetch(`${API_URL}/profile/qualification`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newQualification.name,
+          issuer: newQualification.issuer,
+          year: newQualification.year || '',
+          fileUrl: fileUrl
+        })
       });
       
-      console.log('Qualification response:', response.data);
-      
-      setUser(prev => ({
-        ...prev,
-        qualifications: [...(prev.qualifications || []), response.data.data]
-      }));
-      setNewQualification({ name: "", issuer: "", year: "", file: null });
-      toast.success('Qualification added successfully!');
+      if (response.ok) {
+        const data = await response.json();
+        setUser(prev => ({
+          ...prev,
+          qualifications: [...(prev.qualifications || []), data.data]
+        }));
+        setNewQualification({ name: "", issuer: "", year: "", file: null });
+        toast.success('Qualification added!');
+      } else {
+        toast.error('Failed to add qualification');
+      }
     } catch (err) {
       console.error('Error adding qualification:', err);
-      console.error('Error response:', err.response);
-      toast.error(err.response?.data?.message || 'Failed to add qualification');
+      toast.error('Failed to add qualification');
     }
   };
 
   const handleDeleteQualification = async (qualId) => {
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
-      await apiClient.delete(`/profile/qualification/${qualId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/profile/qualification/${qualId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
-      setUser(prev => ({
-        ...prev,
-        qualifications: prev.qualifications.filter(q => q.id !== qualId)
-      }));
-      toast.success('Qualification deleted');
+      
+      if (response.ok) {
+        setUser(prev => ({
+          ...prev,
+          qualifications: prev.qualifications.filter(q => q.id !== qualId)
+        }));
+        toast.success('Qualification deleted');
+      } else {
+        toast.error('Failed to delete qualification');
+      }
     } catch (err) {
       console.error('Error deleting qualification:', err);
       toast.error('Failed to delete qualification');
@@ -379,40 +472,57 @@ export default function Profile() {
       return;
     }
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
-      const response = await apiClient.post('/profile/volunteering', {
-        title: newVolunteering.title,
-        organization: newVolunteering.organization,
-        hours: newVolunteering.hours || '0'
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/profile/volunteering`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          title: newVolunteering.title,
+          organization: newVolunteering.organization,
+          hours: newVolunteering.hours || '0'
+        })
       });
       
-      setUser(prev => ({
-        ...prev,
-        volunteering: [...(prev.volunteering || []), response.data.data]
-      }));
-      setNewVolunteering({ title: "", organization: "", hours: "" });
-      toast.success('Volunteering added!');
+      if (response.ok) {
+        const data = await response.json();
+        setUser(prev => ({
+          ...prev,
+          volunteering: [...(prev.volunteering || []), data.data]
+        }));
+        setNewVolunteering({ title: "", organization: "", hours: "" });
+        toast.success('Volunteering added!');
+      } else {
+        toast.error('Failed to add volunteering');
+      }
     } catch (err) {
       console.error('Error adding volunteering:', err);
-      toast.error(err.response?.data?.message || 'Failed to add volunteering');
+      toast.error('Failed to add volunteering');
     }
   };
 
   const handleDeleteVolunteering = async (volId) => {
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
-      await apiClient.delete(`/profile/volunteering/${volId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/profile/volunteering/${volId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
-      setUser(prev => ({
-        ...prev,
-        volunteering: prev.volunteering.filter(v => v.id !== volId)
-      }));
-      toast.success('Volunteering deleted');
+      
+      if (response.ok) {
+        setUser(prev => ({
+          ...prev,
+          volunteering: prev.volunteering.filter(v => v.id !== volId)
+        }));
+        toast.success('Volunteering deleted');
+      } else {
+        toast.error('Failed to delete volunteering');
+      }
     } catch (err) {
       console.error('Error deleting volunteering:', err);
       toast.error('Failed to delete volunteering');
@@ -426,40 +536,57 @@ export default function Profile() {
       return;
     }
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
-      const response = await apiClient.post('/profile/availability', {
-        day: newAvailability.day,
-        start: newAvailability.start,
-        end: newAvailability.end
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/profile/availability`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          day: newAvailability.day,
+          start: newAvailability.start,
+          end: newAvailability.end
+        })
       });
       
-      setUser(prev => ({
-        ...prev,
-        availability: [...(prev.availability || []), response.data.data]
-      }));
-      setNewAvailability({ day: "", start: "", end: "" });
-      toast.success('Availability added!');
+      if (response.ok) {
+        const data = await response.json();
+        setUser(prev => ({
+          ...prev,
+          availability: [...(prev.availability || []), data.data]
+        }));
+        setNewAvailability({ day: "", start: "", end: "" });
+        toast.success('Availability added!');
+      } else {
+        toast.error('Failed to add availability');
+      }
     } catch (err) {
       console.error('Error adding availability:', err);
-      toast.error(err.response?.data?.message || 'Failed to add availability');
+      toast.error('Failed to add availability');
     }
   };
 
   const handleDeleteAvailability = async (availId) => {
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      
-      await apiClient.delete(`/profile/availability/${availId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem('accessToken');
+      const response = await fetch(`${API_URL}/profile/availability/${availId}`, {
+        method: 'DELETE',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
-      setUser(prev => ({
-        ...prev,
-        availability: prev.availability.filter(a => a.id !== availId)
-      }));
-      toast.success('Availability deleted');
+      
+      if (response.ok) {
+        setUser(prev => ({
+          ...prev,
+          availability: prev.availability.filter(a => a.id !== availId)
+        }));
+        toast.success('Availability deleted');
+      } else {
+        toast.error('Failed to delete availability');
+      }
     } catch (err) {
       console.error('Error deleting availability:', err);
       toast.error('Failed to delete availability');
@@ -473,22 +600,22 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
+      <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
         <Sidebar />
         <div className="flex-1 md:ml-64 flex items-center justify-center">
           <div className="text-center">
-            <div className="w-8 h-8 border-2 border-[#00B330] border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <Loader2 className="w-8 h-8 animate-spin text-[#00B330] mx-auto" />
             <p className="mt-4 text-gray-500">Loading profile...</p>
           </div>
         </div>
-        <div className="md:hidden"><BottomNav /></div>
+        <BottomNav />
       </div>
     );
   }
 
   if (error || !user) {
     return (
-      <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
+      <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
         <Sidebar />
         <div className="flex-1 md:ml-64 flex items-center justify-center px-4">
           <div className="text-center">
@@ -499,15 +626,15 @@ export default function Profile() {
             </button>
           </div>
         </div>
-        <div className="md:hidden"><BottomNav /></div>
+        <BottomNav />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       <Sidebar />
-      <div className="flex-1 md:ml-64">
+      <div className="flex-1 md:ml-64 pb-20 md:pb-0">
         {/* Header */}
         <div className="bg-white border-b border-gray-100 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-3">
@@ -542,7 +669,7 @@ export default function Profile() {
 
         <div className="flex-1 px-4 py-4 md:px-8 md:py-6 max-w-4xl mx-auto w-full space-y-4">
           {/* Profile Header */}
-          <div className="bg-gradient-to-br from-white to-[#f7f8f7] rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8 shadow-sm">
+          <div className="bg-gradient-to-br from-white to-gray-50 rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8 shadow-sm">
             <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
               <div className="relative flex-shrink-0">
                 <div className="w-24 h-24 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-[#00B330]/20 to-[#00B330]/5 flex items-center justify-center text-[#00B330] text-3xl md:text-4xl font-bold border-4 border-white shadow-lg overflow-hidden">
@@ -627,7 +754,7 @@ export default function Profile() {
             ) : null}
           </div>
 
-          {/* Edit Mode - Quick Info (only for own profile) */}
+          {/* Edit Mode - Quick Info */}
           {isEditing && isOwnProfile && (
             <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8 space-y-4">
               <h3 className="text-sm font-medium text-gray-900">Quick Information</h3>
@@ -644,34 +771,13 @@ export default function Profile() {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">County</label>
-                  <select
+                  <input
                     name="county"
                     value={editForm.county}
                     onChange={handleEditChange}
-                    className="w-full p-2 border border-gray-200 rounded-lg focus:border-[#00B330] outline-none text-sm bg-white"
-                  >
-                    <option value="">Select your county</option>
-                    {COUNTIES.map((county) => (
-                      <option key={county} value={county}>{county}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Sub-County</label>
-                  <select
-                    name="subCounty"
-                    value={editForm.subCounty}
-                    onChange={handleEditChange}
-                    className="w-full p-2 border border-gray-200 rounded-lg focus:border-[#00B330] outline-none text-sm bg-white"
-                    disabled={!editForm.county}
-                  >
-                    <option value="">
-                      {editForm.county ? 'Select your sub-county' : 'Select county first'}
-                    </option>
-                    {(SUB_COUNTIES[editForm.county] || []).map((subCounty) => (
-                      <option key={subCounty} value={subCounty}>{subCounty}</option>
-                    ))}
-                  </select>
+                    className="w-full p-2 border border-gray-200 rounded-lg focus:border-[#00B330] outline-none text-sm"
+                    placeholder="Your county"
+                  />
                 </div>
               </div>
               <div className="flex flex-wrap gap-4">
@@ -699,7 +805,7 @@ export default function Profile() {
             </div>
           )}
 
-          {/* Skills - Only show add button for own profile */}
+          {/* Skills */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -748,7 +854,7 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Experience - Only show add/delete for own profile */}
+          {/* Experience */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Briefcase className="w-4 h-4 text-[#00B330]" /> Experience
@@ -812,7 +918,7 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Qualifications - Only show add/delete for own profile */}
+          {/* Qualifications */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Award className="w-4 h-4 text-[#00B330]" /> Qualifications
@@ -820,94 +926,33 @@ export default function Profile() {
             </h3>
             <div className="space-y-4">
               {isOwnProfile && (
-                <>
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      value={newQualification.name}
-                      onChange={(e) => setNewQualification({...newQualification, name: e.target.value})}
-                      className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                      placeholder="Qualification *"
-                    />
-                    <input
-                      value={newQualification.issuer}
-                      onChange={(e) => setNewQualification({...newQualification, issuer: e.target.value})}
-                      className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                      placeholder="Issuer *"
-                    />
-                    <input
-                      value={newQualification.year}
-                      onChange={(e) => setNewQualification({...newQualification, year: e.target.value})}
-                      className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                      placeholder="Year"
-                    />
-                    <button
-                      onClick={() => {
-                        console.log('Add qualification button clicked');
-                        handleAddQualification();
-                      }}
-                      className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* File Upload with Drag and Drop */}
-                  <div 
-                    className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-                      newQualification.file ? 'border-[#00B330] bg-[#00B330]/5' : 'border-gray-300 hover:border-[#00B330]'
-                    }`}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.currentTarget.classList.add('border-[#00B330]', 'bg-[#00B330]/5');
-                    }}
-                    onDragLeave={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
-                      const files = e.dataTransfer.files;
-                      if (files && files.length > 0) {
-                        const file = files[0];
-                        console.log('File dropped:', file);
-                        setNewQualification({...newQualification, file: file});
-                        toast.success(`File selected: ${file.name}`);
-                      }
-                    }}
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    value={newQualification.name}
+                    onChange={(e) => setNewQualification({...newQualification, name: e.target.value})}
+                    className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Qualification"
+                  />
+                  <input
+                    value={newQualification.issuer}
+                    onChange={(e) => setNewQualification({...newQualification, issuer: e.target.value})}
+                    className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Issuer"
+                  />
+                  <input
+                    value={newQualification.year}
+                    onChange={(e) => setNewQualification({...newQualification, year: e.target.value})}
+                    className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    placeholder="Year"
+                  />
+                  <button
+                    onClick={handleAddQualification}
+                    className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
                   >
-                    <input
-                      type="file"
-                      id="certificate-upload"
-                      accept=".pdf,.png,.jpg,.jpeg"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          const file = e.target.files[0];
-                          console.log('File selected via input:', file);
-                          setNewQualification({...newQualification, file: file});
-                          toast.success(`File selected: ${file.name}`);
-                        }
-                      }}
-                    />
-                    <label
-                      htmlFor="certificate-upload"
-                      className="cursor-pointer block"
-                    >
-                      <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500">Drag and drop or click to upload certificate</p>
-                      <p className="text-xs text-gray-400">PDF, PNG, JPG (Max 5MB)</p>
-                      {newQualification.file && (
-                        <p className="mt-2 text-sm text-[#00B330]">✅ {newQualification.file.name}</p>
-                      )}
-                    </label>
-                  </div>
-                </>
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
               )}
-
               {user.qualifications?.length > 0 ? (
                 <div className="space-y-3">
                   {user.qualifications.map((qual) => (
@@ -921,7 +966,7 @@ export default function Profile() {
                         <p className="text-xs text-gray-400">{qual.year}</p>
                         {qual.fileUrl && (
                           <a 
-                            href={`https://isdp-backend.onrender.com${qual.fileUrl}`}
+                            href={`${API_URL}${qual.fileUrl}`}
                             target="_blank" 
                             rel="noopener noreferrer" 
                             className="text-xs text-[#00B330] hover:underline flex items-center gap-1 mt-1"
@@ -947,7 +992,7 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Volunteering - Only show add/delete for own profile */}
+          {/* Volunteering */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Heart className="w-4 h-4 text-[#00B330]" /> Volunteering
@@ -1011,7 +1056,7 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Availability - Only show add/delete for own profile */}
+          {/* Availability */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Clock className="w-4 h-4 text-[#00B330]" /> Availability
@@ -1080,9 +1125,9 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Save Button - Only for own profile */}
+          {/* Save Button */}
           {isEditing && isOwnProfile && (
-            <div className="sticky bottom-0 pb-4 pt-2 bg-[#f7f8f7] z-10">
+            <div className="sticky bottom-0 pb-4 pt-2 bg-gray-50 z-10">
               <button
                 onClick={handleSave}
                 className="w-full py-3.5 bg-[#00B330] text-white rounded-xl font-medium hover:bg-[#009f2b] transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#00B330]/20"
@@ -1093,7 +1138,7 @@ export default function Profile() {
           )}
         </div>
       </div>
-      <div className="md:hidden"><BottomNav /></div>
+      <BottomNav />
     </div>
   );
 }
