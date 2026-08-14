@@ -7,6 +7,8 @@ import {
   Phone, Mail, Loader2, Plus, BookOpen, UserCheck
 } from 'lucide-react';
 import apiClient from '../services/auth.service';
+import Sidebar from '../components/Sidebar';
+import BottomNav from '../components/BottomNav';
 import toast from 'react-hot-toast';
 
 export default function Mentorship() {
@@ -28,7 +30,12 @@ export default function Mentorship() {
   // Check authentication on mount
   useEffect(() => {
     const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+    console.log('🔑 Token found:', token ? 'Yes' : 'No');
+    console.log('🔑 Token value:', token ? token.substring(0, 50) + '...' : 'None');
+    console.log('👤 User ID:', userId);
+    
     if (!token) {
+      console.log('❌ No token found, redirecting to login');
       navigate('/login');
       return;
     }
@@ -37,52 +44,67 @@ export default function Mentorship() {
 
   useEffect(() => {
     if (isAuthenticated) {
+      console.log('✅ Authenticated, fetching data...');
       fetchData();
     }
   }, [activeTab, isAuthenticated]);
 
   const fetchData = async () => {
     setLoading(true);
+    console.log('📡 Fetching mentorship data...');
     try {
       const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
       if (!token) {
+        console.log('❌ No token during fetch');
         navigate('/login');
         return;
       }
 
       const headers = { Authorization: `Bearer ${token}` };
+      console.log('📡 Headers:', headers);
 
       if (activeTab === 'requests' || activeTab === 'sessions') {
         try {
+          console.log('📡 Fetching requests, sessions, stats...');
           const [requestsRes, sessionsRes, statsRes] = await Promise.all([
             apiClient.get('/mentorship/requests', { headers }),
             apiClient.get('/mentorship/sessions', { headers }),
             apiClient.get('/mentorship/stats', { headers })
           ]);
 
+          console.log('📡 Requests response:', requestsRes.data);
+          console.log('📡 Sessions response:', sessionsRes.data);
+          console.log('📡 Stats response:', statsRes.data);
+
           setRequests(requestsRes.data.data || []);
           setSessions(sessionsRes.data.data || []);
           setStats(statsRes.data.data);
         } catch (err) {
+          console.error('❌ Fetch error:', err);
+          console.error('❌ Error status:', err.response?.status);
+          console.error('❌ Error data:', err.response?.data);
           if (err.response?.status === 401) {
+            console.log('🔑 Token expired, clearing storage...');
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             localStorage.removeItem('user');
             navigate('/login');
             return;
           }
-          console.error('Fetch error:', err);
         }
       }
 
       if (activeTab === 'search') {
         try {
+          console.log('📡 Searching mentors...');
           const mentorsRes = await apiClient.get('/mentorship/search', { 
             headers,
             params: { limit: 50 }
           });
+          console.log('📡 Mentors found:', mentorsRes.data.data?.length || 0);
           setMentors(mentorsRes.data.data || []);
         } catch (err) {
+          console.error('❌ Search error:', err);
           if (err.response?.status === 401) {
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
@@ -90,11 +112,10 @@ export default function Mentorship() {
             navigate('/login');
             return;
           }
-          console.error('Search error:', err);
         }
       }
     } catch (error) {
-      console.error('Fetch error:', error);
+      console.error('❌ Fetch error:', error);
       toast.error('Failed to load mentorship data');
     } finally {
       setLoading(false);
@@ -229,12 +250,14 @@ export default function Mentorship() {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+        <Sidebar />
         <div className="flex-1 md:ml-64 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-8 h-8 animate-spin text-[#00B330] mx-auto" />
             <p className="mt-4 text-gray-500">Checking authentication...</p>
           </div>
         </div>
+        <BottomNav />
       </div>
     );
   }
@@ -242,18 +265,21 @@ export default function Mentorship() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+        <Sidebar />
         <div className="flex-1 md:ml-64 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-8 h-8 animate-spin text-[#00B330] mx-auto" />
             <p className="mt-4 text-gray-500">Loading mentorship...</p>
           </div>
         </div>
+        <BottomNav />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+      <Sidebar />
       <div className="flex-1 md:ml-64 pb-20 md:pb-0">
         {/* Header */}
         <div className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
@@ -398,6 +424,7 @@ export default function Mentorship() {
         </div>
       )}
 
+      <BottomNav />
     </div>
   );
 }
