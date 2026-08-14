@@ -1,9 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { Home, Search, BookOpen, MessageCircle, User } from "lucide-react";
+import { Home, Search, BookOpen, MessageCircle, User, Settings, LayoutDashboard } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useTheme } from "../context/ThemeContext";
 
 export default function BottomNav() {
+  const { darkMode } = useTheme();
   const [userId, setUserId] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     try {
@@ -12,6 +15,11 @@ export default function BottomNav() {
         const user = JSON.parse(userStr);
         if (user && user.id) {
           setUserId(user.id);
+        }
+        // Check if user is admin
+        if (user.role === 'admin' || 
+            user.email === 'piusmwangi611@gmail.com') {
+          setIsAdmin(true);
         }
       }
     } catch (e) {
@@ -25,10 +33,19 @@ export default function BottomNav() {
     { to: "/mentorship", label: "Mentorship", icon: BookOpen },
     { to: "/messages", label: "Messages", icon: MessageCircle },
     { to: userId ? `/profile/${userId}` : "/profile", label: "Profile", icon: User },
+    { to: "/settings", label: "Settings", icon: Settings },
   ];
 
+  if (isAdmin) {
+    navItems.push({ to: "/admin", label: "Admin", icon: LayoutDashboard });
+  }
+
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
+    <nav className={`md:hidden fixed bottom-0 left-0 right-0 border-t z-50 transition-colors duration-300 ${
+      darkMode 
+        ? 'bg-gray-900 border-gray-700' 
+        : 'bg-white border-gray-200'
+    }`}>
       <div className="flex items-center justify-around h-16">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -38,7 +55,9 @@ export default function BottomNav() {
               to={item.to}
               className={({ isActive }) =>
                 `flex flex-col items-center justify-center flex-1 h-full transition-colors ${
-                  isActive ? "text-[#00B330]" : "text-gray-500"
+                  isActive 
+                    ? 'text-[#00B330]' 
+                    : darkMode ? 'text-gray-500' : 'text-gray-500'
                 }`
               }
             >

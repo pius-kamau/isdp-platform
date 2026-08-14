@@ -1,225 +1,188 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import {
-  Eye,
-  EyeOff,
-  Mail,
-  LockKeyhole,
-  Loader2,
-  ArrowLeft,
-} from "lucide-react";
-
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { Eye, EyeOff, Loader2, Mail, Lock, ArrowRight } from "lucide-react";
+import toast from "react-hot-toast";
 import { loginUser } from "../../services/auth.service";
 
 export default function Login() {
   const navigate = useNavigate();
-
-  const [form, setForm] = useState({
+  const [formData, setFormData] = useState({
     email: "",
-    password: "",
+    password: ""
   });
-
-  const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      navigate('/home', { replace: true });
+    }
+  }, [navigate]);
 
   const handleChange = (e) => {
-    setForm((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
-
-    if (error) {
-      setError("");
-    }
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    setError("");
     setLoading(true);
 
     try {
-      const response = await loginUser(form);
-      console.log("Login response:", response);
+      const data = await loginUser(formData.email, formData.password);
+      console.log('Login response:', data);
 
-      // Handle different response structures
-      const data = response?.data?.data || response?.data || response;
-
-      console.log("Parsed data:", data);
-
-      if (data?.accessToken) {
-        const storage = rememberMe ? localStorage : sessionStorage;
-        storage.setItem("accessToken", data.accessToken);
-        if (data.refreshToken) {
-          storage.setItem("refreshToken", data.refreshToken);
-        }
-      }
-
-      // Check for 2FA requirement
-      if (data?.requires2FA) {
-        navigate("/verify-2fa", {
-          state: {
-            challenge: data,
-            email: form.email,
-          },
-        });
-        return;
-      }
-
-      // Redirect to home on successful login
-      if (data?.accessToken) {
-        navigate("/home");
+      if (data.status === 'success') {
+        const { user, accessToken, refreshToken } = data.data;
+        
+        localStorage.clear();
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        localStorage.setItem('user', JSON.stringify(user));
+        
+        toast.success('Login successful!');
+        navigate('/home', { replace: true });
       } else {
-        setError("Login failed. No access token received.");
+        toast.error(data.message || 'Login failed');
       }
-    } catch (err) {
-      console.error("Login error:", err);
-      const message =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Unable to sign in. Please check your credentials.";
-      setError(message);
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f8f7] flex flex-col">
-      {/* Mobile Header */}
-      <div className="flex items-center px-4 py-4 bg-white border-b border-gray-100">
-        <button
-          onClick={() => navigate("/")}
-          className="p-2 -ml-2 text-gray-500 hover:text-gray-700"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <span className="text-lg font-semibold text-[#00B330] ml-1">ISDP</span>
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="flex justify-center">
+          <div className="h-12 w-12 rounded-2xl bg-[#00B330] flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-[#00B330]/20">
+            I
+          </div>
+        </div>
+        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          Welcome back
+        </h2>
+        <p className="mt-2 text-center text-sm text-gray-600">
+          Sign in to your account to continue
+        </p>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-5 py-8">
-        <div className="w-full max-w-[400px]">
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
-              Welcome back
-            </h1>
-            <p className="mt-2 text-sm text-gray-500">
-              Sign in to continue to your ISDP account.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
-
-            {/* Email */}
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-800">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
               </label>
-              <div className="relative">
-                <Mail
-                  size={17}
-                  strokeWidth={1.8}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                />
+              <div className="mt-1 relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-gray-400" />
+                </div>
                 <input
+                  id="email"
                   name="email"
                   type="email"
                   autoComplete="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  placeholder="you@example.com"
                   required
-                  className="h-12 w-full rounded-xl border border-gray-200 bg-white pl-11 pr-4 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#00B330] focus:ring-2 focus:ring-[#00B330]/10"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="appearance-none block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent sm:text-sm"
+                  placeholder="you@example.com"
                 />
               </div>
             </div>
 
-            {/* Password */}
             <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-800">
-                  Password
-                </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-xs font-medium text-[#00A62C] hover:underline"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-
-              <div className="relative">
-                <LockKeyhole
-                  size={17}
-                  strokeWidth={1.8}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
-                />
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                Password
+              </label>
+              <div className="mt-1 relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
                 <input
+                  id="password"
                   name="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
-                  value={form.password}
-                  onChange={handleChange}
-                  placeholder="Enter your password"
                   required
-                  className="h-12 w-full rounded-xl border border-gray-200 bg-white pl-11 pr-12 text-sm outline-none transition placeholder:text-gray-400 focus:border-[#00B330] focus:ring-2 focus:ring-[#00B330]/10"
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="appearance-none block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent sm:text-sm"
+                  placeholder="••••••••"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 hover:text-gray-700"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
                 >
-                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5 text-gray-400" />
+                  ) : (
+                    <Eye className="h-5 w-5 text-gray-400" />
+                  )}
                 </button>
               </div>
             </div>
 
-            {/* Remember */}
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 accent-[#00B330]"
-              />
-              <span className="text-xs text-gray-500">Remember me</span>
-            </label>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <input
+                  id="remember-me"
+                  name="remember-me"
+                  type="checkbox"
+                  className="h-4 w-4 text-[#00B330] focus:ring-[#00B330] border-gray-300 rounded"
+                />
+                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                  Remember me
+                </label>
+              </div>
+              <div className="text-sm">
+                <Link to="/forgot-password" className="font-medium text-[#00B330] hover:text-[#009f2b]">
+                  Forgot password?
+                </Link>
+              </div>
+            </div>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-[#00B330] text-sm font-medium text-white transition hover:bg-[#009f2b] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 animate-spin" size={17} />
-                  Signing in...
-                </>
-              ) : (
-                "Sign in"
-              )}
-            </button>
+            <div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-[#00B330] hover:bg-[#009f2b] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00B330] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <span className="flex items-center gap-2">
+                    Sign in <ArrowRight className="w-4 h-4" />
+                  </span>
+                )}
+              </button>
+            </div>
           </form>
 
-          <div className="mt-8 text-center">
-            <p className="text-sm text-gray-500">
-              Don't have an account?{" "}
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">
+                  Don't have an account?
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6">
               <Link
                 to="/register"
-                className="font-medium text-[#00A62C] hover:underline"
+                className="w-full flex justify-center py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00B330] transition-colors"
               >
-                Create an account
+                Create new account
               </Link>
-            </p>
+            </div>
           </div>
         </div>
       </div>

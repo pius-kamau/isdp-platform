@@ -1,0 +1,91 @@
+import axios from 'axios';
+
+// API base URL
+const API_URL = import.meta.env.VITE_API_URL || 'https://isdp-backend.onrender.com/api';
+
+const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Add token to requests if available
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Login user
+export const loginUser = async (credentials) => {
+  try {
+    const response = await apiClient.post('/auth/login', credentials);
+    
+    // Store user data
+    if (response.data?.data?.user) {
+      localStorage.setItem('user', JSON.stringify(response.data.data.user));
+    }
+    
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Register user
+export const registerUser = async (userData) => {
+  try {
+    const response = await apiClient.post('/auth/register', userData);
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Get current user
+export const getCurrentUser = async () => {
+  try {
+    const response = await apiClient.get('/users/me');
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Update user profile
+export const updateUser = async (userId, data) => {
+  try {
+    const response = await apiClient.put(`/users/${userId}`, data);
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Logout
+export const logoutUser = () => {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  sessionStorage.removeItem('accessToken');
+  sessionStorage.removeItem('refreshToken');
+  sessionStorage.removeItem('user');
+};
+
+// Get stored user
+export const getStoredUser = () => {
+  const userStr = localStorage.getItem('user') || sessionStorage.getItem('user');
+  if (userStr) {
+    try {
+      return JSON.parse(userStr);
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+};
+
+export default apiClient;

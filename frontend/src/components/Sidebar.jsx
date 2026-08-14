@@ -1,18 +1,30 @@
 import { NavLink } from "react-router-dom";
-import { Home, Search, BookOpen, MessageCircle, User, LogOut } from "lucide-react";
+import { Home, Search, BookOpen, MessageCircle, User, LogOut, Settings, LayoutDashboard } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useTheme } from "../context/ThemeContext";
 
 export default function Sidebar() {
+  const { darkMode } = useTheme();
   const [userId, setUserId] = useState(null);
+  const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     try {
-      // Directly read from localStorage without importing
       const userStr = localStorage.getItem('user') || sessionStorage.getItem('user');
       if (userStr) {
-        const user = JSON.parse(userStr);
-        if (user && user.id) {
-          setUserId(user.id);
+        const userData = JSON.parse(userStr);
+        setUser(userData);
+        if (userData && userData.id) {
+          setUserId(userData.id);
+        }
+        // Check if user is admin - by role OR email
+        if (userData.role === 'admin' || 
+            userData.email === 'piusmwangi611@gmail.com') {
+          setIsAdmin(true);
+          console.log('✅ Admin access granted for:', userData.email);
+        } else {
+          console.log('👤 Regular user:', userData.email);
         }
       }
     } catch (e) {
@@ -26,7 +38,13 @@ export default function Sidebar() {
     { to: "/mentorship", label: "Mentorship", icon: BookOpen },
     { to: "/messages", label: "Messages", icon: MessageCircle },
     { to: userId ? `/profile/${userId}` : "/profile", label: "Profile", icon: User },
+    { to: "/settings", label: "Settings", icon: Settings },
   ];
+
+  // Only show admin link if user is admin
+  if (isAdmin) {
+    navItems.push({ to: "/admin", label: "Admin", icon: LayoutDashboard });
+  }
 
   const handleLogout = () => {
     try {
@@ -42,13 +60,40 @@ export default function Sidebar() {
     window.location.href = "/login";
   };
 
+  const renderAvatar = () => {
+    if (user?.profilePhoto) {
+      return (
+        <img 
+          src={user.profilePhoto} 
+          alt={user.fullName || 'User'}
+          className="w-8 h-8 rounded-full object-cover"
+        />
+      );
+    }
+    
+    return (
+      <div className="w-8 h-8 bg-[#00B330] rounded-lg flex items-center justify-center text-white font-bold text-sm">
+        {user?.fullName?.charAt(0) || 'I'}
+      </div>
+    );
+  };
+
   return (
-    <aside className="hidden md:flex md:flex-col md:w-64 md:min-h-screen md:bg-white md:border-r md:border-gray-200 md:fixed md:left-0 md:top-0 md:z-40">
-      <div className="flex items-center gap-2 px-6 py-4 border-b border-gray-200">
-        <div className="w-8 h-8 bg-[#00B330] rounded-lg flex items-center justify-center text-white font-bold text-sm">
-          I
-        </div>
-        <span className="font-semibold text-gray-900">ISDP</span>
+    <aside className={`hidden md:flex md:flex-col md:w-64 md:min-h-screen md:border-r md:fixed md:left-0 md:top-0 md:z-40 transition-colors duration-300 ${
+      darkMode 
+        ? 'bg-gray-900 border-gray-700' 
+        : 'bg-white border-gray-200'
+    }`}>
+      <div className={`flex items-center gap-2 px-6 py-4 border-b transition-colors duration-300 ${
+        darkMode ? 'border-gray-700' : 'border-gray-200'
+      }`}>
+        {renderAvatar()}
+        <span className={`font-semibold transition-colors duration-300 ${
+          darkMode ? 'text-white' : 'text-gray-900'
+        }`}>ISDP</span>
+        {isAdmin && (
+          <span className="ml-auto text-[10px] bg-[#00B330] text-white px-2 py-0.5 rounded-full">Admin</span>
+        )}
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">
@@ -61,8 +106,12 @@ export default function Sidebar() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
                   isActive
-                    ? "bg-[#00B330]/10 text-[#00B330]"
-                    : "text-gray-600 hover:bg-gray-100"
+                    ? darkMode 
+                      ? 'bg-[#00B330]/20 text-[#00B330]' 
+                      : 'bg-[#00B330]/10 text-[#00B330]'
+                    : darkMode
+                      ? 'text-gray-400 hover:bg-gray-800'
+                      : 'text-gray-600 hover:bg-gray-100'
                 }`
               }
             >
@@ -73,10 +122,16 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-gray-200 p-3">
+      <div className={`border-t p-3 transition-colors duration-300 ${
+        darkMode ? 'border-gray-700' : 'border-gray-200'
+      }`}>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-4 py-2.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+          className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-lg transition-colors ${
+            darkMode 
+              ? 'text-red-400 hover:bg-red-900/30' 
+              : 'text-red-600 hover:bg-red-50'
+          }`}
         >
           <LogOut className="w-5 h-5" />
           <span className="text-sm font-medium">Logout</span>

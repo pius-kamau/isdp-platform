@@ -1,116 +1,112 @@
-import axios from 'axios';
+const API_URL = 'https://isdp-backend.onrender.com/api';
 
-// API base URL
-const API_URL = import.meta.env.VITE_API_URL || 'https://isdp-backend.onrender.com/api';
+// Get stored token
+export const getToken = () => {
+  return localStorage.getItem('accessToken');
+};
 
-const apiClient = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add token to requests if available
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+// Set auth headers
+export const authHeader = () => {
+  const token = getToken();
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    return { 'Authorization': `Bearer ${token}` };
   }
-  return config;
-});
+  return {};
+};
 
-// ============ AUTH FUNCTIONS ============
+// Generic fetch with auth
+export const fetchWithAuth = async (url, options = {}) => {
+  const token = getToken();
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  const response = await fetch(`${API_URL}${url}`, {
+    ...options,
+    headers,
+  });
+  
+  if (response.status === 401) {
+    localStorage.clear();
+    window.location.href = '/login';
+    throw new Error('Session expired');
+  }
+  
+  return response;
+};
 
 // Login user
-export const loginUser = async (credentials) => {
-  try {
-    const response = await apiClient.post('/auth/login', credentials);
-    
-    // Store user data if available
-    if (response.data?.data?.user) {
-      localStorage.setItem('user', JSON.stringify(response.data.data.user));
-    }
-    
-    return response;
-  } catch (error) {
-    throw error;
-  }
+export const loginUser = async (email, password) => {
+  const response = await fetch(`${API_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  return response.json();
 };
 
 // Register user
 export const registerUser = async (userData) => {
-  try {
-    const response = await apiClient.post('/auth/register', userData);
-    return response;
-  } catch (error) {
-    throw error;
-  }
+  const response = await fetch(`${API_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(userData),
+  });
+  return response.json();
 };
 
-// Forgot password - request reset link
+// Forgot password
 export const forgotPassword = async (email) => {
-  try {
-    const response = await apiClient.post('/auth/password/forgot-password', { email });
-    return response;
-  } catch (error) {
-    throw error;
-  }
+  const response = await fetch(`${API_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return response.json();
 };
 
-// Reset password with token
+// Reset password
 export const resetPassword = async (token, newPassword) => {
-  try {
-    const response = await apiClient.post('/auth/password/reset-password', {
-      token,
-      newPassword
-    });
-    return response;
-  } catch (error) {
-    throw error;
-  }
+  const response = await fetch(`${API_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, newPassword }),
+  });
+  return response.json();
 };
 
-// Get current user
-export const getCurrentUser = async () => {
-  try {
-    const response = await apiClient.get('/users/me');
-    return response;
-  } catch (error) {
-    throw error;
-  }
+// Get profile
+export const getProfile = async () => {
+  const response = await fetchWithAuth('/users/me');
+  return response.json();
 };
 
-// Update user profile
-export const updateUser = async (userId, data) => {
-  try {
-    const response = await apiClient.put(`/users/${userId}`, data);
-    return response;
-  } catch (error) {
-    throw error;
-  }
+// Update profile
+export const updateProfile = async (data) => {
+  const response = await fetchWithAuth('/users/update', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  return response.json();
 };
 
-// Logout
-export const logoutUser = () => {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
-  localStorage.removeItem('user');
-  sessionStorage.removeItem('accessToken');
-  sessionStorage.removeItem('refreshToken');
-  sessionStorage.removeItem('user');
+// Default export
+const authService = {
+  getToken,
+  authHeader,
+  fetchWithAuth,
+  loginUser,
+  registerUser,
+  forgotPassword,
+  resetPassword,
+  getProfile,
+  updateProfile,
 };
 
-// Get stored user
-export const getStoredUser = () => {
-  try {
-    const userStr = localStorage.getItem('user') || sessionStorage.getItem('user');
-    if (userStr) {
-      return JSON.parse(userStr);
-    }
-  } catch (e) {
-    console.error('Error parsing stored user:', e);
-  }
-  return null;
-};
-
-export default apiClient;
+export default authService;
