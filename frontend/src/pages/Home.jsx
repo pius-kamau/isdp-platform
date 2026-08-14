@@ -132,10 +132,6 @@ export default function Home() {
     }
   };
 
-  const getGreeting = () => {
-    return "Welcome to ISDP Platform";
-  };
-
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchQuery.trim()) {
@@ -183,7 +179,7 @@ export default function Home() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-                {getGreeting()} 👋
+                Welcome to ISDP Platform
               </h1>
               <p className="text-sm md:text-base text-gray-500 mt-1">
                 Discover skills and connect with mentors in your community
@@ -232,8 +228,7 @@ export default function Home() {
           {/* Popular Skills */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#00B330]" />
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
                 Popular Skills
               </h2>
               <button 
@@ -260,8 +255,7 @@ export default function Home() {
           {/* Community Members */}
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#00B330]" />
+              <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
                 Community Members
               </h2>
               <button 
@@ -336,17 +330,17 @@ export default function Home() {
                       <div className="flex flex-wrap gap-1.5">
                         {person.county && (
                           <span className="px-2.5 py-1 bg-blue-50 text-blue-600 text-xs rounded-lg font-medium">
-                            📍 {person.county}
+                            {person.county}
                           </span>
                         )}
                         {person.role === 'admin' && (
                           <span className="px-2.5 py-1 bg-yellow-50 text-yellow-600 text-xs rounded-lg font-medium">
-                            👑 Admin
+                            Admin
                           </span>
                         )}
                         {person.isMentor && (
                           <span className="px-2.5 py-1 bg-purple-50 text-purple-600 text-xs rounded-lg font-medium">
-                            🎓 Mentor
+                            Mentor
                           </span>
                         )}
                       </div>
@@ -393,7 +387,7 @@ export default function Home() {
                 onClick={() => navigate('/discover')}
                 className="mt-4 px-6 py-2.5 bg-white text-[#00B330] rounded-xl text-sm font-semibold hover:bg-gray-50 transition-all hover:shadow-md active:scale-95"
               >
-                Discover →
+                Discover
               </button>
             </div>
           </div>
