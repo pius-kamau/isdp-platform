@@ -1,13 +1,17 @@
 import { NavLink } from "react-router-dom";
-import { Home, Search, BookOpen, MessageCircle, User, LogOut, Settings, LayoutDashboard } from "lucide-react";
+import { Home, Search, BookOpen, MessageCircle, User, LogOut, Settings, LayoutDashboard, Bell } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "../context/ThemeContext";
+
+const API_URL = 'https://isdp-backend.onrender.com/api';
 
 export default function Sidebar() {
   const { darkMode } = useTheme();
   const [userId, setUserId] = useState(null);
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
     try {
@@ -18,32 +22,54 @@ export default function Sidebar() {
         if (userData && userData.id) {
           setUserId(userData.id);
         }
-        // Check if user is admin - by role OR email
+        // Check if user is admin
         if (userData.role === 'admin' || 
             userData.email === 'piusmwangi611@gmail.com') {
           setIsAdmin(true);
-          console.log('✅ Admin access granted for:', userData.email);
-        } else {
-          console.log('👤 Regular user:', userData.email);
         }
+        // Fetch unread counts
+        fetchUnreadCounts(userData.id);
       }
     } catch (e) {
       console.error('Error getting user:', e);
     }
   }, []);
 
+  const fetchUnreadCounts = async (userId) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      // Fetch unread messages count
+      const messagesRes = await fetch(`${API_URL}/messages/unread`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const messagesData = await messagesRes.json();
+      
+      if (messagesData.status === 'success') {
+        setUnreadCount(messagesData.data.unreadCount || 0);
+      }
+
+      // For notifications - you can add a notifications endpoint later
+      // For now, we'll use a placeholder
+      setNotificationCount(0);
+    } catch (error) {
+      console.error('Error fetching unread counts:', error);
+    }
+  };
+
   const navItems = [
-    { to: "/home", label: "Home", icon: Home },
-    { to: "/discover", label: "Discover", icon: Search },
-    { to: "/mentorship", label: "Mentorship", icon: BookOpen },
-    { to: "/messages", label: "Messages", icon: MessageCircle },
-    { to: userId ? `/profile/${userId}` : "/profile", label: "Profile", icon: User },
-    { to: "/settings", label: "Settings", icon: Settings },
+    { to: "/home", label: "Home", icon: Home, badge: false },
+    { to: "/discover", label: "Discover", icon: Search, badge: false },
+    { to: "/mentorship", label: "Mentorship", icon: BookOpen, badge: false },
+    { to: "/messages", label: "Messages", icon: MessageCircle, badge: true, count: unreadCount },
+    { to: userId ? `/profile/${userId}` : "/profile", label: "Profile", icon: User, badge: false },
+    { to: "/settings", label: "Settings", icon: Settings, badge: false },
   ];
 
-  // Only show admin link if user is admin
+  // Add admin link if user is admin
   if (isAdmin) {
-    navItems.push({ to: "/admin", label: "Admin", icon: LayoutDashboard });
+    navItems.push({ to: "/admin", label: "Admin", icon: LayoutDashboard, badge: false });
   }
 
   const handleLogout = () => {
@@ -94,6 +120,11 @@ export default function Sidebar() {
         {isAdmin && (
           <span className="ml-auto text-[10px] bg-[#00B330] text-white px-2 py-0.5 rounded-full">Admin</span>
         )}
+        {notificationCount > 0 && (
+          <span className="ml-1 text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full">
+            {notificationCount}
+          </span>
+        )}
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">
@@ -117,6 +148,11 @@ export default function Sidebar() {
             >
               <Icon className="w-5 h-5" />
               <span className="text-sm font-medium">{item.label}</span>
+              {item.badge && item.count > 0 && (
+                <span className="ml-auto bg-[#00B330] text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                  {item.count > 99 ? '99+' : item.count}
+                </span>
+              )}
             </NavLink>
           );
         })}
