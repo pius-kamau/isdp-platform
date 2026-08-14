@@ -6,10 +6,11 @@ import {
   Star, Briefcase, Award, ChevronRight, Video,
   Phone, Mail, Loader2, Plus, BookOpen, UserCheck
 } from 'lucide-react';
-import apiClient from '../services/auth.service';
 import Sidebar from '../components/Sidebar';
 import BottomNav from '../components/BottomNav';
 import toast from 'react-hot-toast';
+
+const API_URL = 'https://isdp-backend.onrender.com/api';
 
 export default function Mentorship() {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function Mentorship() {
   const [requests, setRequests] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [mentors, setMentors] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,17 +27,13 @@ export default function Mentorship() {
   const [requestMessage, setRequestMessage] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  const userId = JSON.parse(localStorage.getItem('user') || '{}')?.id;
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : null;
+  const userId = user?.id;
 
-  // Check authentication on mount
   useEffect(() => {
-    const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-    console.log('🔑 Token found:', token ? 'Yes' : 'No');
-    console.log('🔑 Token value:', token ? token.substring(0, 50) + '...' : 'None');
-    console.log('👤 User ID:', userId);
-    
+    const token = localStorage.getItem('accessToken');
     if (!token) {
-      console.log('❌ No token found, redirecting to login');
       navigate('/login');
       return;
     }
@@ -44,174 +42,174 @@ export default function Mentorship() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      console.log('✅ Authenticated, fetching data...');
-      fetchData();
+      fetchAllData();
     }
   }, [activeTab, isAuthenticated]);
 
-  const fetchData = async () => {
+  const fetchAllData = async () => {
     setLoading(true);
-    console.log('📡 Fetching mentorship data...');
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const token = localStorage.getItem('accessToken');
       if (!token) {
-        console.log('❌ No token during fetch');
         navigate('/login');
         return;
       }
 
-      const headers = { Authorization: `Bearer ${token}` };
-      console.log('📡 Headers:', headers);
-
-      if (activeTab === 'requests' || activeTab === 'sessions') {
-        try {
-          console.log('📡 Fetching requests, sessions, stats...');
-          const [requestsRes, sessionsRes, statsRes] = await Promise.all([
-            apiClient.get('/mentorship/requests', { headers }),
-            apiClient.get('/mentorship/sessions', { headers }),
-            apiClient.get('/mentorship/stats', { headers })
-          ]);
-
-          console.log('📡 Requests response:', requestsRes.data);
-          console.log('📡 Sessions response:', sessionsRes.data);
-          console.log('📡 Stats response:', statsRes.data);
-
-          setRequests(requestsRes.data.data || []);
-          setSessions(sessionsRes.data.data || []);
-          setStats(statsRes.data.data);
-        } catch (err) {
-          console.error('❌ Fetch error:', err);
-          console.error('❌ Error status:', err.response?.status);
-          console.error('❌ Error data:', err.response?.data);
-          if (err.response?.status === 401) {
-            console.log('🔑 Token expired, clearing storage...');
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('user');
-            navigate('/login');
-            return;
-          }
+      // Fetch all users to find mentors
+      let response = await fetch(`${API_URL}/admin/users`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
+      });
+
+      if (!response.ok) {
+        response = await fetch(`${API_URL}/users`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
       }
 
-      if (activeTab === 'search') {
-        try {
-          console.log('📡 Searching mentors...');
-          const mentorsRes = await apiClient.get('/mentorship/search', { 
-            headers,
-            params: { limit: 50 }
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success' && data.data) {
+          const users = data.data;
+          setAllUsers(users);
+          
+          // Filter mentors (users with isMentor = true)
+          const mentorUsers = users.filter(u => u.isMentor === true);
+          setMentors(mentorUsers);
+          
+          // Stats
+          setStats({
+            totalMentors: mentorUsers.length,
+            totalUsers: users.length
           });
-          console.log('📡 Mentors found:', mentorsRes.data.data?.length || 0);
-          setMentors(mentorsRes.data.data || []);
-        } catch (err) {
-          console.error('❌ Search error:', err);
-          if (err.response?.status === 401) {
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('user');
-            navigate('/login');
-            return;
-          }
         }
       }
+
+      // Fetch mentorship requests if they exist
+      try {
+        const requestsRes = await fetch(`${API_URL}/mentorship/requests`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (requestsRes.ok) {
+          const requestsData = await requestsRes.json();
+          setRequests(requestsData.data || []);
+        }
+      } catch (e) {
+        console.log('Requests endpoint not available yet');
+      }
+
+      // Fetch sessions if they exist
+      try {
+        const sessionsRes = await fetch(`${API_URL}/mentorship/sessions`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (sessionsRes.ok) {
+          const sessionsData = await sessionsRes.json();
+          setSessions(sessionsData.data || []);
+        }
+      } catch (e) {
+        console.log('Sessions endpoint not available yet');
+      }
+
     } catch (error) {
-      console.error('❌ Fetch error:', error);
+      console.error('Error fetching data:', error);
       toast.error('Failed to load mentorship data');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSearch = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
-      if (!token) {
-        navigate('/login');
-        return;
-      }
-      
-      const headers = { Authorization: `Bearer ${token}` };
-      const params = { limit: 50 };
-      if (searchQuery.trim()) {
-        params.query = searchQuery.trim();
-      }
-      
-      const response = await apiClient.get('/mentorship/search', { headers, params });
-      setMentors(response.data.data || []);
-    } catch (error) {
-      if (error.response?.status === 401) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        navigate('/login');
-        return;
-      }
-      console.error('Search error:', error);
-      toast.error('Failed to search mentors');
-    } finally {
-      setLoading(false);
+  const handleSearch = () => {
+    if (!searchQuery.trim()) {
+      // Reset to show all mentors
+      const mentorUsers = allUsers.filter(u => u.isMentor === true);
+      setMentors(mentorUsers);
+      return;
     }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = allUsers.filter(u => 
+      u.isMentor === true && (
+        u.fullName?.toLowerCase().includes(query) ||
+        u.occupation?.toLowerCase().includes(query) ||
+        u.county?.toLowerCase().includes(query) ||
+        u.skills?.some(s => s.skill?.name?.toLowerCase().includes(query))
+      )
+    );
+    setMentors(filtered);
   };
 
-  const handleSendRequest = async (mentorId, skillId) => {
+  const handleSendRequest = async (mentorId) => {
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const token = localStorage.getItem('accessToken');
       if (!token) {
         navigate('/login');
         return;
       }
 
-      const response = await apiClient.post('/mentorship/requests', {
-        mentorId,
-        skillId,
-        message: requestMessage || 'I would like to request mentorship'
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await fetch(`${API_URL}/mentorship/requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          mentorId,
+          message: requestMessage || 'I would like to request mentorship'
+        })
       });
 
-      toast.success('Mentorship request sent!');
-      setShowRequestModal(false);
-      setSelectedMentor(null);
-      setRequestMessage('');
-      await fetchData();
-    } catch (error) {
-      if (error.response?.status === 401) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        navigate('/login');
-        return;
+      if (response.ok) {
+        toast.success('Mentorship request sent!');
+        setShowRequestModal(false);
+        setSelectedMentor(null);
+        setRequestMessage('');
+        fetchAllData();
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Failed to send request');
       }
+    } catch (error) {
       console.error('Send request error:', error);
-      toast.error(error.response?.data?.message || 'Failed to send request');
+      toast.error('Failed to send request');
     }
   };
 
   const handleUpdateRequest = async (requestId, status) => {
     try {
-      const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+      const token = localStorage.getItem('accessToken');
       if (!token) {
         navigate('/login');
         return;
       }
 
-      await apiClient.put(`/mentorship/requests/${requestId}`, {
-        status
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await fetch(`${API_URL}/mentorship/requests/${requestId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status })
       });
 
-      toast.success(`Request ${status}`);
-      await fetchData();
-    } catch (error) {
-      if (error.response?.status === 401) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        navigate('/login');
-        return;
+      if (response.ok) {
+        toast.success(`Request ${status}`);
+        fetchAllData();
+      } else {
+        toast.error('Failed to update request');
       }
+    } catch (error) {
       console.error('Update request error:', error);
       toast.error('Failed to update request');
     }
@@ -225,7 +223,6 @@ export default function Mentorship() {
       cancelled: 'bg-gray-100 text-gray-800',
       completed: 'bg-blue-100 text-blue-800',
       scheduled: 'bg-purple-100 text-purple-800',
-      'no-show': 'bg-red-100 text-red-800',
     };
     return styles[status] || 'bg-gray-100 text-gray-800';
   };
@@ -246,23 +243,7 @@ export default function Mentorship() {
     { id: 'sessions', label: 'Sessions', icon: Calendar },
   ];
 
-  // Show loading while checking authentication
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-        <Sidebar />
-        <div className="flex-1 md:ml-64 flex items-center justify-center">
-          <div className="text-center">
-            <Loader2 className="w-8 h-8 animate-spin text-[#00B330] mx-auto" />
-            <p className="mt-4 text-gray-500">Checking authentication...</p>
-          </div>
-        </div>
-        <BottomNav />
-      </div>
-    );
-  }
-
-  if (loading) {
+  if (!isAuthenticated || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
         <Sidebar />
@@ -291,11 +272,11 @@ export default function Mentorship() {
             {stats && (
               <div className="flex items-center gap-3 text-sm">
                 <span className="text-gray-500">
-                  <span className="font-semibold text-[#00B330]">{stats.asMentor?.pending || 0}</span> pending
+                  <span className="font-semibold text-[#00B330]">{stats.totalMentors || 0}</span> mentors
                 </span>
                 <span className="text-gray-300">|</span>
                 <span className="text-gray-500">
-                  <span className="font-semibold text-[#00B330]">{stats.sessions?.upcoming || 0}</span> upcoming
+                  <span className="font-semibold text-[#00B330]">{requests.filter(r => r.status === 'pending').length || 0}</span> pending
                 </span>
               </div>
             )}
@@ -382,9 +363,9 @@ export default function Mentorship() {
               <div>
                 <h3 className="font-medium text-gray-900">{selectedMentor.fullName}</h3>
                 <p className="text-sm text-gray-500">{selectedMentor.occupation || 'Mentor'}</p>
-                {selectedMentor.mentorSkills && selectedMentor.mentorSkills.length > 0 && (
+                {selectedMentor.skills && selectedMentor.skills.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {selectedMentor.mentorSkills.slice(0, 2).map((skill) => (
+                    {selectedMentor.skills.slice(0, 2).map((skill) => (
                       <span key={skill.id} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
                         {skill.skill?.name}
                       </span>
@@ -408,14 +389,7 @@ export default function Mentorship() {
             </div>
 
             <button
-              onClick={() => {
-                const skillId = selectedMentor.mentorSkills?.[0]?.skillId || selectedMentor.skills?.[0]?.skillId;
-                if (!skillId) {
-                  toast.error('No skill found for this mentor');
-                  return;
-                }
-                handleSendRequest(selectedMentor.id, skillId);
-              }}
+              onClick={() => handleSendRequest(selectedMentor.id)}
               className="w-full py-2.5 bg-[#00B330] text-white rounded-lg hover:bg-[#009f2b] transition font-medium"
             >
               Send Request
@@ -455,7 +429,7 @@ function SearchTab({ mentors, searchQuery, setSearchQuery, onSearch, onSelectMen
         <div className="text-center py-12">
           <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900">No Mentors Found</h3>
-          <p className="text-gray-500">Try adjusting your search criteria or check back later.</p>
+          <p className="text-gray-500">No users have been designated as mentors yet.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -468,16 +442,16 @@ function SearchTab({ mentors, searchQuery, setSearchQuery, onSearch, onSelectMen
                 <div className="flex-1 min-w-0">
                   <h4 className="font-medium text-gray-900 truncate">{mentor.fullName}</h4>
                   <p className="text-sm text-gray-500 truncate">{mentor.occupation || 'Mentor'}</p>
-                  {mentor.mentorSkills && mentor.mentorSkills.length > 0 && (
+                  {mentor.skills && mentor.skills.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {mentor.mentorSkills.slice(0, 3).map((skill) => (
+                      {mentor.skills.slice(0, 3).map((skill) => (
                         <span key={skill.id} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
                           {skill.skill?.name}
                         </span>
                       ))}
-                      {mentor.mentorSkills.length > 3 && (
+                      {mentor.skills.length > 3 && (
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">
-                          +{mentor.mentorSkills.length - 3}
+                          +{mentor.skills.length - 3}
                         </span>
                       )}
                     </div>
@@ -625,14 +599,7 @@ function SessionsTab({ sessions, userId }) {
                       <Clock className="w-3 h-3" />
                       {new Date(session.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    <span>{session.durationMinutes} min</span>
                   </div>
-                  {session.locationDetail && (
-                    <p className="text-xs text-gray-400 mt-1">{session.locationType}: {session.locationDetail}</p>
-                  )}
-                  {session.notes && (
-                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">{session.notes}</p>
-                  )}
                 </div>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusBadge(session.status)}`}>
