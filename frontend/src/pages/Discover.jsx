@@ -1,15 +1,17 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Search, MapPin, User, Filter, X, Star, Clock, Award, Briefcase, MessageCircle, Heart, Sparkles } from "lucide-react";
-import apiClient from "../services/auth.service";
 import Sidebar from "../components/Sidebar";
 import BottomNav from "../components/BottomNav";
 import toast from "react-hot-toast";
+
+const API_URL = 'https://isdp-backend.onrender.com/api';
 
 export default function Discover() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
+  const [allUsers, setAllUsers] = useState([]);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
@@ -20,31 +22,96 @@ export default function Discover() {
     isVolunteer: false,
   });
 
-  const handleSearch = async () => {
+  // Fetch all users from database
+  const fetchAllUsers = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      if (searchQuery) params.append("q", searchQuery);
-      if (filters.skill) params.append("skill", filters.skill);
-      if (filters.county) params.append("county", filters.county);
-      if (filters.isMentor) params.append("isMentor", "true");
-      if (filters.isVolunteer) params.append("isVolunteer", "true");
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-      console.log("Searching with params:", params.toString());
-      const response = await apiClient.get(`/search/users?${params.toString()}`);
-      console.log("Search response:", response);
-      setResults(response.data?.data || []);
+      let response = await fetch(`${API_URL}/admin/users`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        response = await fetch(`${API_URL}/users`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success' && data.data) {
+          setAllUsers(data.data);
+          applyFilters(data.data);
+        }
+      }
     } catch (error) {
-      console.error("Search error:", error);
-      console.error("Error response:", error.response);
+      console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const applyFilters = (users) => {
+    let filtered = users || allUsers || [];
+    
+    // Search query filter
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(u => 
+        u.fullName?.toLowerCase().includes(q) || 
+        u.occupation?.toLowerCase().includes(q) ||
+        u.county?.toLowerCase().includes(q) ||
+        u.skills?.some(s => s.skill?.name?.toLowerCase().includes(q))
+      );
+    }
+    
+    // Skill filter
+    if (filters.skill) {
+      const skillLower = filters.skill.toLowerCase();
+      filtered = filtered.filter(u => 
+        u.skills?.some(s => s.skill?.name?.toLowerCase().includes(skillLower))
+      );
+    }
+    
+    // County filter
+    if (filters.county) {
+      const countyLower = filters.county.toLowerCase();
+      filtered = filtered.filter(u => 
+        u.county?.toLowerCase().includes(countyLower)
+      );
+    }
+    
+    // Mentor filter
+    if (filters.isMentor) {
+      filtered = filtered.filter(u => u.isMentor === true);
+    }
+    
+    // Volunteer filter
+    if (filters.isVolunteer) {
+      filtered = filtered.filter(u => u.isVolunteer === true);
+    }
+    
+    setResults(filtered);
+  };
+
   useEffect(() => {
-    handleSearch();
+    fetchAllUsers();
   }, []);
+
+  const handleSearch = () => {
+    applyFilters(allUsers);
+  };
 
   const clearFilters = () => {
     setFilters({
@@ -54,6 +121,7 @@ export default function Discover() {
       isVolunteer: false,
     });
     setSearchQuery("");
+    applyFilters(allUsers);
   };
 
   return (
@@ -177,7 +245,7 @@ export default function Discover() {
           {loading ? (
             <div className="text-center py-16">
               <div className="w-10 h-10 border-3 border-[#00B330] border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="mt-4 text-gray-500 text-sm">Searching...</p>
+              <p className="mt-4 text-gray-500 text-sm">Loading...</p>
             </div>
           ) : results.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
