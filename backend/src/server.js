@@ -11,6 +11,7 @@ const profileRoutes = require('./routes/profile.routes');
 const messageRoutes = require('./routes/message.routes');
 const adminRoutes = require('./routes/admin.routes');
 const skillRoutes = require('./routes/skill.routes');
+const mentorshipRoutes = require('./routes/mentorship.routes');
 const { PrismaClient } = require('@prisma/client');
 
 // Load environment variables
@@ -38,31 +39,23 @@ const io = new Server(server, {
 });
 
 // ============ SOCKET.IO CONFIGURATION ============
-// Store online users
 const onlineUsers = new Map();
 const userSockets = new Map();
 
 io.on('connection', (socket) => {
   console.log('🔌 New client connected:', socket.id);
 
-  // User joins with their userId
   socket.on('user-joined', (userId) => {
     console.log('👤 User joined:', userId);
     onlineUsers.set(userId, socket.id);
     userSockets.set(socket.id, userId);
-    
-    // Broadcast online users
     io.emit('online-users', Array.from(onlineUsers.keys()));
-    console.log('📊 Online users:', Array.from(onlineUsers.keys()));
   });
 
-  // Handle sending messages
   socket.on('send-message', async (data) => {
     try {
       const { senderId, receiverId, messageText } = data;
-      console.log('📨 Message from', senderId, 'to', receiverId, ':', messageText);
-
-      // Save message to database
+      
       const message = await prisma.message.create({
         data: {
           senderId,
@@ -88,73 +81,23 @@ io.on('connection', (socket) => {
         }
       });
 
-      // Send to receiver if online
       const receiverSocketId = onlineUsers.get(receiverId);
       if (receiverSocketId) {
         io.to(receiverSocketId).emit('new-message', message);
-        console.log('📤 Message delivered to:', receiverId);
       }
-
-      // Send confirmation to sender
       socket.emit('message-sent', message);
-      
-      // Update unread count for receiver
-      const unreadCount = await prisma.message.count({
-        where: {
-          receiverId,
-          isRead: false
-        }
-      });
-      
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit('unread-count', { count: unreadCount });
-      }
-
     } catch (error) {
       console.error('Error sending message:', error);
       socket.emit('message-error', { error: 'Failed to send message' });
     }
   });
 
-  // Handle typing indicator
-  socket.on('typing', (data) => {
-    const { senderId, receiverId, isTyping } = data;
-    const receiverSocketId = onlineUsers.get(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit('user-typing', {
-        userId: senderId,
-        isTyping
-      });
-    }
-  });
-
-  // Handle read receipts
-  socket.on('mark-read', async (data) => {
-    try {
-      const { messageId, senderId } = data;
-      
-      await prisma.message.update({
-        where: { id: messageId },
-        data: { isRead: true, readAt: new Date() }
-      });
-
-      const senderSocketId = onlineUsers.get(senderId);
-      if (senderSocketId) {
-        io.to(senderSocketId).emit('message-read', { messageId });
-      }
-    } catch (error) {
-      console.error('Error marking message as read:', error);
-    }
-  });
-
-  // Handle disconnect
   socket.on('disconnect', () => {
     const userId = userSockets.get(socket.id);
     if (userId) {
       onlineUsers.delete(userId);
       userSockets.delete(socket.id);
       io.emit('online-users', Array.from(onlineUsers.keys()));
-      console.log('👋 User disconnected:', userId);
     }
     console.log('🔌 Client disconnected:', socket.id);
   });
@@ -180,7 +123,6 @@ app.options('*', cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Log all requests
 app.use((req, res, next) => {
   console.log(`${req.method} ${req.path}`);
   next();
@@ -203,6 +145,7 @@ app.use('/api/profile', profileRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/skills', skillRoutes);
+app.use('/api/mentorship', mentorshipRoutes);
 
 // ============ HEALTH CHECK ============
 app.get('/api/health', (req, res) => {
@@ -224,6 +167,7 @@ app.get('/', (req, res) => {
       messages: '/api/messages',
       admin: '/api/admin',
       skills: '/api/skills',
+      mentorship: '/api/mentorship',
       health: '/api/health'
     }
   });
@@ -247,7 +191,6 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🔌 Socket.io server ready`);
 });
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
   await prisma.$disconnect();
