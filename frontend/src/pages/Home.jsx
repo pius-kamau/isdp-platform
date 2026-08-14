@@ -8,8 +8,9 @@ import {
 } from "lucide-react";
 import BottomNav from "../components/BottomNav";
 import Sidebar from "../components/Sidebar";
-import apiClient from "../services/auth.service";
 import toast from "react-hot-toast";
+
+const API_URL = 'https://isdp-backend.onrender.com/api';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function Home() {
     totalMentors: 0,
     totalUsers: 0
   });
+  const [allUsers, setAllUsers] = useState([]);
 
   const popularSkills = [
     "Technology", "Farming", "Teaching", "Repair", 
@@ -29,21 +31,67 @@ export default function Home() {
   ];
 
   useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
     fetchData();
     fetchUser();
+    fetchAllUsers();
   }, []);
 
   const fetchUser = async () => {
     try {
       const token = localStorage.getItem('accessToken');
       if (token) {
-        const response = await apiClient.get('/users/me', {
+        const response = await fetch(`${API_URL}/users/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        setUser(response.data.data);
+        const data = await response.json();
+        setUser(data.data);
       }
     } catch (error) {
       console.error('Error fetching user:', error);
+    }
+  };
+
+  // Fetch real users from the database
+  const fetchAllUsers = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      // Try admin/users first, then fallback to /users
+      let response = await fetch(`${API_URL}/admin/users`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        response = await fetch(`${API_URL}/users`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success' && data.data) {
+          setAllUsers(data.data);
+          // Update stats with real user count
+          setStats(prev => ({
+            ...prev,
+            totalUsers: data.data.length
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
     }
   };
 
@@ -56,20 +104,17 @@ export default function Home() {
         return;
       }
 
-      const headers = { Authorization: `Bearer ${token}` };
-      
       // Fetch mentors for recommendations
-      const mentorsRes = await apiClient.get('/mentorship/search', {
-        headers,
-        params: { limit: 6 }
+      const mentorsRes = await fetch(`${API_URL}/mentorship/search`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-
-      const mentorData = mentorsRes.data.data || [];
+      const mentorData = await mentorsRes.json();
+      const data = mentorData.data || [];
       
-      // Format recommendations
-      const formatted = mentorData.map((mentor, index) => ({
+      // Format recommendations from real users
+      const formatted = data.map((mentor) => ({
         id: mentor.id,
-        name: mentor.fullName || `Mentor ${index + 1}`,
+        name: mentor.fullName || 'Mentor',
         skill: mentor.mentorSkills?.[0]?.skill?.name || "Mentor",
         location: mentor.county || "Kenya",
         rating: 4.5 + Math.random() * 0.5,
@@ -82,51 +127,16 @@ export default function Home() {
 
       setRecommendations(formatted);
       setStats({
-        totalSkills: mentorData.reduce((acc, m) => acc + (m.mentorSkills?.length || 0), 0),
-        totalMentors: mentorData.length,
-        totalUsers: mentorData.length + 5
+        totalSkills: data.reduce((acc, m) => acc + (m.mentorSkills?.length || 0), 0),
+        totalMentors: data.length,
+        totalUsers: data.length + 5 // Will be updated by fetchAllUsers
       });
     } catch (error) {
       console.error('Error fetching recommendations:', error);
-      // Use fallback data if API fails
-      setRecommendations(fallbackRecommendations);
     } finally {
       setLoading(false);
     }
   };
-
-  const fallbackRecommendations = [
-    {
-      id: 1,
-      name: "John Kamau",
-      skill: "Plumbing",
-      location: "Nairobi",
-      rating: 4.8,
-      available: true,
-      initials: "JK",
-      occupation: "Master Plumber",
-    },
-    {
-      id: 2,
-      name: "Grace Wanjiru",
-      skill: "Farming",
-      location: "Kiambu",
-      rating: 4.9,
-      available: true,
-      initials: "GW",
-      occupation: "Agricultural Expert",
-    },
-    {
-      id: 3,
-      name: "Peter Ochieng",
-      skill: "Teaching",
-      location: "Kisumu",
-      rating: 4.7,
-      available: false,
-      initials: "PO",
-      occupation: "Education Specialist",
-    },
-  ];
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -199,7 +209,7 @@ export default function Home() {
                   <p className="text-xs text-gray-500">Skills</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-[#00B330]">{stats.totalUsers}+</p>
+                  <p className="text-2xl font-bold text-[#00B330]">{allUsers.length || stats.totalUsers}+</p>
                   <p className="text-xs text-gray-500">Members</p>
                 </div>
               </div>
@@ -239,7 +249,7 @@ export default function Home() {
               <p className="text-xs text-gray-500">Skills</p>
             </div>
             <div className="bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
-              <p className="text-xl font-bold text-[#00B330]">{stats.totalUsers}+</p>
+              <p className="text-xl font-bold text-[#00B330]">{allUsers.length || stats.totalUsers}+</p>
               <p className="text-xs text-gray-500">Members</p>
             </div>
           </div>
