@@ -15,7 +15,7 @@ const API_URL = 'https://isdp-backend.onrender.com/api';
 export default function Home() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
-  const [recommendations, setRecommendations] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [stats, setStats] = useState({
@@ -23,7 +23,6 @@ export default function Home() {
     totalMentors: 0,
     totalUsers: 0
   });
-  const [allUsers, setAllUsers] = useState([]);
 
   const popularSkills = [
     "Technology", "Farming", "Teaching", "Repair", 
@@ -36,7 +35,6 @@ export default function Home() {
       navigate('/login');
       return;
     }
-    fetchData();
     fetchUser();
     fetchAllUsers();
   }, []);
@@ -49,7 +47,9 @@ export default function Home() {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await response.json();
-        setUser(data.data);
+        if (data.status === 'success') {
+          setUser(data.data);
+        }
       }
     } catch (error) {
       console.error('Error fetching user:', error);
@@ -58,11 +58,14 @@ export default function Home() {
 
   // Fetch real users from the database
   const fetchAllUsers = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem('accessToken');
-      if (!token) return;
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-      // Try admin/users first, then fallback to /users
       let response = await fetch(`${API_URL}/admin/users`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -82,57 +85,21 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json();
         if (data.status === 'success' && data.data) {
-          setAllUsers(data.data);
-          // Update stats with real user count
-          setStats(prev => ({
-            ...prev,
-            totalUsers: data.data.length
-          }));
+          const users = data.data;
+          setAllUsers(users);
+          
+          // Calculate stats
+          const mentors = users.filter(u => u.isMentor === true).length;
+          
+          setStats({
+            totalSkills: 0, // We'll calculate this differently
+            totalMentors: mentors,
+            totalUsers: users.length
+          });
         }
       }
     } catch (error) {
       console.error('Error fetching users:', error);
-    }
-  };
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      // Fetch mentors for recommendations
-      const mentorsRes = await fetch(`${API_URL}/mentorship/search`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const mentorData = await mentorsRes.json();
-      const data = mentorData.data || [];
-      
-      // Format recommendations from real users
-      const formatted = data.map((mentor) => ({
-        id: mentor.id,
-        name: mentor.fullName || 'Mentor',
-        skill: mentor.mentorSkills?.[0]?.skill?.name || "Mentor",
-        location: mentor.county || "Kenya",
-        rating: 4.5 + Math.random() * 0.5,
-        available: true,
-        initials: mentor.fullName?.charAt(0) || "M",
-        profilePhoto: mentor.profilePhoto,
-        occupation: mentor.occupation || "Mentor",
-        skills: mentor.mentorSkills || []
-      }));
-
-      setRecommendations(formatted);
-      setStats({
-        totalSkills: data.reduce((acc, m) => acc + (m.mentorSkills?.length || 0), 0),
-        totalMentors: data.length,
-        totalUsers: data.length + 5 // Will be updated by fetchAllUsers
-      });
-    } catch (error) {
-      console.error('Error fetching recommendations:', error);
     } finally {
       setLoading(false);
     }
@@ -168,7 +135,7 @@ export default function Home() {
             <div className="hidden md:flex md:flex-col">
               <span className="text-sm text-gray-500">Welcome back,</span>
               <span className="text-lg font-semibold text-gray-900">
-                {user?.fullName || 'Pius'}
+                {user?.fullName || 'User'}
               </span>
             </div>
           </div>
@@ -188,7 +155,7 @@ export default function Home() {
         </header>
 
         <div className="max-w-6xl mx-auto px-4 py-4 md:px-8 md:py-6">
-          {/* Welcome Section - Improved */}
+          {/* Welcome Section */}
           <div className="mb-6 md:mb-8">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between">
               <div>
@@ -199,24 +166,26 @@ export default function Home() {
                   Discover skills and connect with mentors in your community
                 </p>
               </div>
-              <div className="hidden md:flex items-center gap-6 mt-2 md:mt-0">
+              <div className="hidden md:flex items-center gap-6 mt-2 md:mt-0 bg-white px-6 py-3 rounded-2xl border border-gray-100 shadow-sm">
                 <div className="text-center">
                   <p className="text-2xl font-bold text-[#00B330]">{stats.totalMentors}</p>
-                  <p className="text-xs text-gray-500">Mentors</p>
+                  <p className="text-xs text-gray-500 font-medium">Mentors</p>
                 </div>
+                <div className="w-px h-10 bg-gray-200"></div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-[#00B330]">{stats.totalSkills}</p>
-                  <p className="text-xs text-gray-500">Skills</p>
+                  <p className="text-2xl font-bold text-[#00B330]">{stats.totalSkills || 0}</p>
+                  <p className="text-xs text-gray-500 font-medium">Skills</p>
                 </div>
+                <div className="w-px h-10 bg-gray-200"></div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-[#00B330]">{allUsers.length || stats.totalUsers}+</p>
-                  <p className="text-xs text-gray-500">Members</p>
+                  <p className="text-2xl font-bold text-[#00B330]">{stats.totalUsers}</p>
+                  <p className="text-xs text-gray-500 font-medium">Members</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Search Bar - Enhanced */}
+          {/* Search Bar */}
           <form onSubmit={handleSearch} className="mb-6 md:mb-8">
             <div className="relative max-w-2xl">
               <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
@@ -227,11 +196,11 @@ export default function Home() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search for skills, mentors, or topics..."
-                className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent text-sm md:text-base placeholder:text-gray-400 shadow-sm hover:shadow-md transition-shadow"
+                className="w-full pl-12 pr-28 py-3.5 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent text-sm md:text-base placeholder:text-gray-400 shadow-sm hover:shadow-md transition-shadow"
               />
               <button
                 type="submit"
-                className="absolute right-2 top-1.5 px-4 py-2 bg-[#00B330] text-white rounded-xl text-sm font-medium hover:bg-[#009f2b] transition-colors"
+                className="absolute right-2 top-1.5 px-5 py-2 bg-[#00B330] text-white rounded-xl text-sm font-medium hover:bg-[#009f2b] transition-all hover:shadow-md active:scale-95"
               >
                 Search
               </button>
@@ -242,15 +211,15 @@ export default function Home() {
           <div className="grid grid-cols-3 gap-3 md:hidden mb-6">
             <div className="bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
               <p className="text-xl font-bold text-[#00B330]">{stats.totalMentors}</p>
-              <p className="text-xs text-gray-500">Mentors</p>
+              <p className="text-xs text-gray-500 font-medium">Mentors</p>
             </div>
             <div className="bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
-              <p className="text-xl font-bold text-[#00B330]">{stats.totalSkills}</p>
-              <p className="text-xs text-gray-500">Skills</p>
+              <p className="text-xl font-bold text-[#00B330]">{stats.totalSkills || 0}</p>
+              <p className="text-xs text-gray-500 font-medium">Skills</p>
             </div>
             <div className="bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
-              <p className="text-xl font-bold text-[#00B330]">{allUsers.length || stats.totalUsers}+</p>
-              <p className="text-xs text-gray-500">Members</p>
+              <p className="text-xl font-bold text-[#00B330]">{stats.totalUsers}</p>
+              <p className="text-xs text-gray-500 font-medium">Members</p>
             </div>
           </div>
 
@@ -263,7 +232,7 @@ export default function Home() {
               </h2>
               <button 
                 onClick={() => navigate('/discover')}
-                className="text-sm text-[#00B330] font-medium hover:underline flex items-center gap-1"
+                className="text-sm text-[#00B330] font-medium hover:underline flex items-center gap-1 transition-colors"
               >
                 View All
                 <ChevronRight className="w-4 h-4" />
@@ -282,16 +251,16 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Recommendations - Professional Cards */}
+          {/* Community Members */}
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                 <Users className="w-4 h-4 text-[#00B330]" />
-                Top Mentors
+                Community Members
               </h2>
               <button 
-                onClick={() => navigate('/mentorship')}
-                className="text-sm text-[#00B330] font-medium hover:underline flex items-center gap-1"
+                onClick={() => navigate('/discover')}
+                className="text-sm text-[#00B330] font-medium hover:underline flex items-center gap-1 transition-colors"
               >
                 View All
                 <ChevronRight className="w-4 h-4" />
@@ -301,23 +270,23 @@ export default function Home() {
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 animate-spin text-[#00B330]" />
-                <span className="ml-3 text-gray-500">Loading mentors...</span>
+                <span className="ml-3 text-gray-500 font-medium">Loading members...</span>
               </div>
-            ) : recommendations.length === 0 ? (
+            ) : allUsers.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
                 <Users className="w-16 h-16 text-gray-300 mx-auto mb-3" />
-                <h3 className="text-lg font-medium text-gray-900">No mentors found</h3>
-                <p className="text-gray-500">Check back later for available mentors</p>
+                <h3 className="text-lg font-medium text-gray-900">No members found</h3>
+                <p className="text-gray-500">Start connecting with people in your community</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                {recommendations.map((person) => (
+                {allUsers.slice(0, 6).map((person) => (
                   <div
                     key={person.id}
-                    className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer"
+                    className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1"
                     onClick={() => navigate(`/profile/${person.id}`)}
                   >
-                    {/* Card Header - Avatar & Status */}
+                    {/* Card Header */}
                     <div className="relative p-4 pb-0">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
@@ -325,23 +294,23 @@ export default function Home() {
                             {person.profilePhoto ? (
                               <img 
                                 src={person.profilePhoto} 
-                                alt={person.name}
+                                alt={person.fullName}
                                 className="w-14 h-14 rounded-xl object-cover"
                               />
                             ) : (
-                              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#00B330] to-[#008A26] flex items-center justify-center text-white font-bold text-xl">
-                                {person.initials}
+                              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#00B330] to-[#008A26] flex items-center justify-center text-white font-bold text-xl shadow-md shadow-[#00B330]/20">
+                                {person.fullName?.charAt(0) || 'U'}
                               </div>
                             )}
-                            {person.available && (
+                            {person.isActive !== false && (
                               <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></span>
                             )}
                           </div>
                           <div>
                             <h3 className="font-semibold text-gray-900 text-base leading-tight">
-                              {person.name}
+                              {person.fullName || 'User'}
                             </h3>
-                            <p className="text-sm text-gray-500">{person.occupation || 'Mentor'}</p>
+                            <p className="text-sm text-gray-500">{person.occupation || 'Member'}</p>
                           </div>
                         </div>
                         <button 
@@ -356,47 +325,39 @@ export default function Home() {
                       </div>
                     </div>
 
-                    {/* Skills Tags */}
+                    {/* User Details */}
                     <div className="px-4 py-3">
                       <div className="flex flex-wrap gap-1.5">
-                        {person.skills && person.skills.length > 0 ? (
-                          person.skills.slice(0, 3).map((skill) => (
-                            <span 
-                              key={skill.id}
-                              className="px-2.5 py-1 bg-[#00B330]/10 text-[#00B330] text-xs rounded-lg font-medium"
-                            >
-                              {skill.skill?.name || 'Skill'}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="px-2.5 py-1 bg-[#00B330]/10 text-[#00B330] text-xs rounded-lg font-medium">
-                            {person.skill}
+                        {person.county && (
+                          <span className="px-2.5 py-1 bg-blue-50 text-blue-600 text-xs rounded-lg font-medium">
+                            📍 {person.county}
                           </span>
                         )}
-                        {person.skills && person.skills.length > 3 && (
-                          <span className="px-2.5 py-1 bg-gray-100 text-gray-500 text-xs rounded-lg font-medium">
-                            +{person.skills.length - 3}
+                        {person.role === 'admin' && (
+                          <span className="px-2.5 py-1 bg-yellow-50 text-yellow-600 text-xs rounded-lg font-medium">
+                            👑 Admin
+                          </span>
+                        )}
+                        {person.isMentor && (
+                          <span className="px-2.5 py-1 bg-purple-50 text-purple-600 text-xs rounded-lg font-medium">
+                            🎓 Mentor
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {/* Card Footer - Location, Rating, Action */}
-                    <div className="px-4 py-3 border-t border-gray-50 bg-gray-50/50">
+                    {/* Card Footer */}
+                    <div className="px-4 py-3 border-t border-gray-50 bg-gray-50/50 group-hover:bg-white transition-colors">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 text-xs text-gray-500">
                           <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5" />
-                            {person.location}
+                            <Users className="w-3.5 h-3.5" />
+                            Member
                           </span>
-                          <span className="flex items-center gap-1">
-                            <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
-                            {person.rating.toFixed(1)}
-                          </span>
-                          {person.available && (
+                          {person.isActive !== false && (
                             <span className="flex items-center gap-1 text-[#00B330] font-medium">
                               <Clock className="w-3.5 h-3.5" />
-                              Available
+                              Active
                             </span>
                           )}
                         </div>
@@ -405,9 +366,9 @@ export default function Home() {
                             e.stopPropagation();
                             navigate(`/profile/${person.id}`);
                           }}
-                          className="px-4 py-1.5 bg-[#00B330] text-white text-xs font-medium rounded-lg hover:bg-[#009f2b] transition-colors shadow-sm hover:shadow-md"
+                          className="px-4 py-1.5 bg-[#00B330] text-white text-xs font-medium rounded-lg hover:bg-[#009f2b] transition-all shadow-sm hover:shadow-md"
                         >
-                          Connect
+                          View Profile
                         </button>
                       </div>
                     </div>
@@ -419,14 +380,14 @@ export default function Home() {
 
           {/* Call to Action - Mobile */}
           <div className="mt-8 md:hidden">
-            <div className="bg-gradient-to-r from-[#00B330] to-[#008A26] rounded-2xl p-6 text-white">
-              <h3 className="text-lg font-bold">Become a Mentor</h3>
-              <p className="text-sm opacity-90 mt-1">Share your skills and help others grow</p>
+            <div className="bg-gradient-to-r from-[#00B330] to-[#008A26] rounded-2xl p-6 text-white shadow-lg shadow-[#00B330]/20">
+              <h3 className="text-lg font-bold">Join the Community</h3>
+              <p className="text-sm opacity-90 mt-1">Connect with {stats.totalUsers}+ members</p>
               <button 
-                onClick={() => navigate('/profile')}
-                className="mt-4 px-6 py-2.5 bg-white text-[#00B330] rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors"
+                onClick={() => navigate('/discover')}
+                className="mt-4 px-6 py-2.5 bg-white text-[#00B330] rounded-xl text-sm font-semibold hover:bg-gray-50 transition-all hover:shadow-md active:scale-95"
               >
-                Get Started
+                Discover →
               </button>
             </div>
           </div>
