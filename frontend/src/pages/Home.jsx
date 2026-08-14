@@ -37,6 +37,7 @@ export default function Home() {
     }
     fetchUser();
     fetchAllUsers();
+    fetchSkills();
   }, []);
 
   const fetchUser = async () => {
@@ -53,6 +54,33 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error fetching user:', error);
+    }
+  };
+
+  // Fetch skills count
+  const fetchSkills = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return;
+
+      const response = await fetch(`${API_URL}/skills`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'success' && data.data) {
+          setStats(prev => ({
+            ...prev,
+            totalSkills: data.data.length || 0
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching skills:', error);
     }
   };
 
@@ -88,14 +116,13 @@ export default function Home() {
           const users = data.data;
           setAllUsers(users);
           
-          // Calculate stats
           const mentors = users.filter(u => u.isMentor === true).length;
           
-          setStats({
-            totalSkills: 0, // We'll calculate this differently
+          setStats(prev => ({
+            ...prev,
             totalMentors: mentors,
             totalUsers: users.length
-          });
+          }));
         }
       }
     } catch (error) {
@@ -106,10 +133,7 @@ export default function Home() {
   };
 
   const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 17) return "Good afternoon";
-    return "Good evening";
+    return "Welcome to ISDP Platform";
   };
 
   const handleSearch = (e) => {
@@ -155,70 +179,52 @@ export default function Home() {
         </header>
 
         <div className="max-w-6xl mx-auto px-4 py-4 md:px-8 md:py-6">
-          {/* Welcome Section */}
-          <div className="mb-6 md:mb-8">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-              <div>
-                <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-                  {getGreeting()} 👋
-                </h1>
-                <p className="text-sm md:text-base text-gray-500 mt-1">
-                  Discover skills and connect with mentors in your community
-                </p>
-              </div>
-              <div className="hidden md:flex items-center gap-6 mt-2 md:mt-0 bg-white px-6 py-3 rounded-2xl border border-gray-100 shadow-sm">
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-[#00B330]">{stats.totalMentors}</p>
-                  <p className="text-xs text-gray-500 font-medium">Mentors</p>
-                </div>
-                <div className="w-px h-10 bg-gray-200"></div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-[#00B330]">{stats.totalSkills || 0}</p>
-                  <p className="text-xs text-gray-500 font-medium">Skills</p>
-                </div>
-                <div className="w-px h-10 bg-gray-200"></div>
-                <div className="text-center">
-                  <p className="text-2xl font-bold text-[#00B330]">{stats.totalUsers}</p>
-                  <p className="text-xs text-gray-500 font-medium">Members</p>
-                </div>
-              </div>
+          {/* Welcome + Search inline */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+                {getGreeting()} 👋
+              </h1>
+              <p className="text-sm md:text-base text-gray-500 mt-1">
+                Discover skills and connect with mentors in your community
+              </p>
             </div>
+            
+            {/* Search Bar - inline with greeting */}
+            <form onSubmit={handleSearch} className="w-full md:w-auto md:min-w-[300px] lg:min-w-[400px]">
+              <div className="relative">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                  <Search className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search skills, mentors, or topics..."
+                  className="w-full pl-9 pr-20 py-2 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent text-sm placeholder:text-gray-400 shadow-sm hover:shadow-md transition-shadow"
+                />
+                <button
+                  type="submit"
+                  className="absolute right-1 top-1 px-4 py-1 bg-[#00B330] text-white rounded-lg text-sm font-medium hover:bg-[#009f2b] transition-all hover:shadow-md active:scale-95"
+                >
+                  Search
+                </button>
+              </div>
+            </form>
           </div>
 
-          {/* Search Bar */}
-          <form onSubmit={handleSearch} className="mb-6 md:mb-8">
-            <div className="relative max-w-2xl">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-                <Search className="w-5 h-5" />
-              </div>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search for skills, mentors, or topics..."
-                className="w-full pl-12 pr-28 py-3.5 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent text-sm md:text-base placeholder:text-gray-400 shadow-sm hover:shadow-md transition-shadow"
-              />
-              <button
-                type="submit"
-                className="absolute right-2 top-1.5 px-5 py-2 bg-[#00B330] text-white rounded-xl text-sm font-medium hover:bg-[#009f2b] transition-all hover:shadow-md active:scale-95"
-              >
-                Search
-              </button>
-            </div>
-          </form>
-
-          {/* Stats Cards - Mobile */}
-          <div className="grid grid-cols-3 gap-3 md:hidden mb-6">
-            <div className="bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
-              <p className="text-xl font-bold text-[#00B330]">{stats.totalMentors}</p>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-3 gap-3 md:grid-cols-3 md:gap-4 mb-6">
+            <div className="bg-white rounded-xl p-3 md:p-4 text-center border border-gray-100 shadow-sm">
+              <p className="text-xl md:text-2xl font-bold text-[#00B330]">{stats.totalMentors}</p>
               <p className="text-xs text-gray-500 font-medium">Mentors</p>
             </div>
-            <div className="bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
-              <p className="text-xl font-bold text-[#00B330]">{stats.totalSkills || 0}</p>
+            <div className="bg-white rounded-xl p-3 md:p-4 text-center border border-gray-100 shadow-sm">
+              <p className="text-xl md:text-2xl font-bold text-[#00B330]">{stats.totalSkills}</p>
               <p className="text-xs text-gray-500 font-medium">Skills</p>
             </div>
-            <div className="bg-white rounded-xl p-3 text-center border border-gray-100 shadow-sm">
-              <p className="text-xl font-bold text-[#00B330]">{stats.totalUsers}</p>
+            <div className="bg-white rounded-xl p-3 md:p-4 text-center border border-gray-100 shadow-sm">
+              <p className="text-xl md:text-2xl font-bold text-[#00B330]">{stats.totalUsers}</p>
               <p className="text-xs text-gray-500 font-medium">Members</p>
             </div>
           </div>
