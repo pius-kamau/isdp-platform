@@ -7,8 +7,6 @@ import {
   BellOff, Trash2, AlertCircle, Flag,
   X, Volume2, VolumeX
 } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
-import BottomNav from '../components/BottomNav';
 import toast from 'react-hot-toast';
 
 export default function Messages() {
@@ -300,21 +298,18 @@ export default function Messages() {
   if (isLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-        <Sidebar />
         <div className="flex-1 md:ml-64 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-8 h-8 animate-spin text-[#00B330] mx-auto" />
             <p className="mt-4 text-gray-500">Loading...</p>
           </div>
         </div>
-        <BottomNav />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      <Sidebar />
       
       <div className="flex-1 md:ml-64">
         <div className="h-screen flex flex-col md:flex-row">
@@ -667,7 +662,6 @@ export default function Messages() {
         </div>
       </div>
 
-      <BottomNav />
     </div>
   );
 }

@@ -1,51 +1,64 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { ThemeProvider } from "./context/ThemeContext";
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
+import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
 
-import SplashScreen from "./components/SplashScreen";
-import Landing from "./pages/Landing";
-import Home from "./pages/Home";
-import Login from "./pages/auth/Login";
-import Register from "./pages/auth/Register";
-import ForgotPassword from "./pages/auth/ForgotPassword";
-import ResetPassword from "./pages/auth/ResetPassword";
-import Discover from "./pages/Discover";
-import Mentorship from "./pages/Mentorship";
-import Messages from "./pages/Messages";
-import Profile from "./pages/Profile";
-import Settings from "./pages/Settings";
-import AdminDashboard from "./pages/AdminDashboard";
+// Components
+import SplashScreen from './components/SplashScreen';
+import Sidebar from './components/Sidebar';
+import BottomNav from './components/BottomNav';
+
+// Pages
+import Landing from './pages/Landing';
+import Login from './pages/auth/Login';
+import Register from './pages/auth/Register';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
+import Home from './pages/Home';
+import Discover from './pages/Discover';
+import Mentorship from './pages/Mentorship';
+import Messages from './pages/Messages';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
+import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
   return (
     <ThemeProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Splash Screen */}
-          <Route path="/" element={<SplashScreen />} />
-
-          {/* Landing Page */}
-          <Route path="/landing" element={<Landing />} />
-
-          {/* Auth Pages */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-
-          {/* Protected Pages */}
-          <Route path="/home" element={<Home />} />
-          <Route path="/discover" element={<Discover />} />
-          <Route path="/mentorship" element={<Mentorship />} />
-          <Route path="/messages" element={<Messages />} />
-          <Route path="/profile/:id" element={<Profile />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-
-          {/* Catch all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <AuthProvider>
+        <SocketProvider>
+          <BrowserRouter>
+            <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
+              <Sidebar />
+              {/* Content area - flex-1 takes remaining space, no forced margin */}
+              <div className="flex-1 min-h-screen">
+                <Routes>
+                  <Route path="/" element={<SplashScreen />} />
+                  <Route path="/landing" element={<Landing />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
+                  <Route path="/home" element={<Home />} />
+                  <Route path="/discover" element={<Discover />} />
+                  <Route path="/mentorship" element={<Mentorship />} />
+                  <Route path="/messages" element={<Messages />} />
+                  <Route path="/messages/:userId" element={<Messages />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/profile/:id" element={<Profile />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+                <BottomNav />
+              </div>
+            </div>
+            <Toaster position="top-right" />
+          </BrowserRouter>
+        </SocketProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

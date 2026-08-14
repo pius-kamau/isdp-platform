@@ -9,8 +9,6 @@ import {
   Save, Edit2, Trash2, Plus, Clock, FileText,
   AlertTriangle, ShieldCheck, Info
 } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
-import BottomNav from '../components/BottomNav';
 import toast from 'react-hot-toast';
 import { useTheme } from '../context/ThemeContext';
 import PrivacyPolicy from '../components/common/PrivacyPolicy';
@@ -267,7 +265,6 @@ export default function Settings() {
       <div className={`min-h-screen transition-colors duration-300 ${
         darkMode ? 'bg-gray-900' : 'bg-gray-50'
       } flex flex-col md:flex-row`}>
-        <Sidebar />
 
         <div className="flex-1 md:ml-64 pb-20 md:pb-0">
           {/* Header */}
@@ -929,7 +926,6 @@ export default function Settings() {
           </div>
         </div>
 
-        <BottomNav />
       </div>
 
       {/* 2FA Modal */}

@@ -10,8 +10,6 @@ import {
   ArrowLeft, X, Crown, Star, Mail, Phone, MapPin,
   LayoutDashboard, Settings, Home, LogOut
 } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
-import BottomNav from '../components/BottomNav';
 import toast from 'react-hot-toast';
 import { useTheme } from '../context/ThemeContext';
 
@@ -211,7 +209,6 @@ export default function AdminDashboard() {
       <div className={`min-h-screen transition-colors duration-300 ${
         darkMode ? 'bg-gray-900' : 'bg-gray-50'
       } flex flex-col md:flex-row`}>
-        <Sidebar />
         <div className="flex-1 md:ml-64 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-10 h-10 animate-spin text-[#00B330] mx-auto" />
@@ -220,7 +217,6 @@ export default function AdminDashboard() {
             }`}>Checking admin access...</p>
           </div>
         </div>
-        <BottomNav />
       </div>
     );
   }
@@ -231,7 +227,6 @@ export default function AdminDashboard() {
       <div className={`min-h-screen transition-colors duration-300 ${
         darkMode ? 'bg-gray-900' : 'bg-gray-50'
       } flex flex-col md:flex-row`}>
-        <Sidebar />
         <div className="flex-1 md:ml-64 flex items-center justify-center">
           <div className="text-center">
             <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
@@ -249,7 +244,6 @@ export default function AdminDashboard() {
             </button>
           </div>
         </div>
-        <BottomNav />
       </div>
     );
   }
@@ -259,7 +253,6 @@ export default function AdminDashboard() {
       <div className={`min-h-screen transition-colors duration-300 ${
         darkMode ? 'bg-gray-900' : 'bg-gray-50'
       } flex flex-col md:flex-row`}>
-        <Sidebar />
         <div className="flex-1 md:ml-64 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-10 h-10 animate-spin text-[#00B330] mx-auto" />
@@ -268,7 +261,6 @@ export default function AdminDashboard() {
             }`}>Loading dashboard...</p>
           </div>
         </div>
-        <BottomNav />
       </div>
     );
   }
@@ -277,7 +269,6 @@ export default function AdminDashboard() {
     <div className={`min-h-screen transition-colors duration-300 ${
       darkMode ? 'bg-gray-900' : 'bg-gray-50'
     } flex flex-col md:flex-row`}>
-      <Sidebar />
 
       <div className="flex-1 md:ml-64 pb-20 md:pb-0">
         {/* Header */}
@@ -653,7 +644,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <BottomNav />
 
       {/* User Detail Modal */}
       {showUserModal && selectedUser && (
