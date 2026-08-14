@@ -1,37 +1,61 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Search, MapPin, User, Filter, X, Star, Clock, Award, Briefcase, MessageCircle, Heart, Sparkles } from "lucide-react";
-import Sidebar from "../components/Sidebar";
-import BottomNav from "../components/BottomNav";
-import toast from "react-hot-toast";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Users, UserPlus, Clock, CheckCircle, XCircle, 
+  Calendar, MapPin, MessageCircle, Search, Filter,
+  Star, Briefcase, Award, ChevronRight, Video,
+  Phone, Mail, Loader2, Plus, BookOpen, UserCheck
+} from 'lucide-react';
+import Sidebar from '../components/Sidebar';
+import BottomNav from '../components/BottomNav';
+import toast from 'react-hot-toast';
 
 const API_URL = 'https://isdp-backend.onrender.com/api';
 
-export default function Discover() {
+export default function Mentorship() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
+  const [activeTab, setActiveTab] = useState('search');
+  const [requests, setRequests] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [mentors, setMentors] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
-  const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    skill: searchParams.get("skill") || "",
-    county: "",
-    isMentor: false,
-    isVolunteer: false,
-  });
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [selectedMentor, setSelectedMentor] = useState(null);
+  const [requestMessage, setRequestMessage] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Fetch all users from database
-  const fetchAllUsers = async () => {
+  const userStr = localStorage.getItem('user');
+  const user = userStr ? JSON.parse(userStr) : null;
+  const userId = user?.id;
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+    setIsAuthenticated(true);
+  }, [navigate]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchAllData();
+    }
+  }, [activeTab, isAuthenticated]);
+
+  const fetchAllData = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('accessToken');
       if (!token) {
-        setLoading(false);
+        navigate('/login');
         return;
       }
 
+      // Fetch all users to find mentors
       let response = await fetch(`${API_URL}/admin/users`, {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -51,330 +75,540 @@ export default function Discover() {
       if (response.ok) {
         const data = await response.json();
         if (data.status === 'success' && data.data) {
-          setAllUsers(data.data);
-          applyFilters(data.data);
+          const users = data.data;
+          setAllUsers(users);
+          
+          // Filter mentors (users with isMentor = true)
+          const mentorUsers = users.filter(u => u.isMentor === true);
+          setMentors(mentorUsers);
+          
+          // Stats
+          setStats({
+            totalMentors: mentorUsers.length,
+            totalUsers: users.length
+          });
         }
       }
+
+      // Fetch mentorship requests if they exist
+      try {
+        const requestsRes = await fetch(`${API_URL}/mentorship/requests`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (requestsRes.ok) {
+          const requestsData = await requestsRes.json();
+          setRequests(requestsData.data || []);
+        }
+      } catch (e) {
+        console.log('Requests endpoint not available yet');
+      }
+
+      // Fetch sessions if they exist
+      try {
+        const sessionsRes = await fetch(`${API_URL}/mentorship/sessions`, {
+          headers: { 
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (sessionsRes.ok) {
+          const sessionsData = await sessionsRes.json();
+          setSessions(sessionsData.data || []);
+        }
+      } catch (e) {
+        console.log('Sessions endpoint not available yet');
+      }
+
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('Error fetching data:', error);
+      toast.error('Failed to load mentorship data');
     } finally {
       setLoading(false);
     }
   };
 
-  const applyFilters = (users) => {
-    let filtered = users || allUsers || [];
-    
-    // Search query filter
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(u => 
-        u.fullName?.toLowerCase().includes(q) || 
-        u.occupation?.toLowerCase().includes(q) ||
-        u.county?.toLowerCase().includes(q) ||
-        u.skills?.some(s => s.skill?.name?.toLowerCase().includes(q))
-      );
-    }
-    
-    // Skill filter
-    if (filters.skill) {
-      const skillLower = filters.skill.toLowerCase();
-      filtered = filtered.filter(u => 
-        u.skills?.some(s => s.skill?.name?.toLowerCase().includes(skillLower))
-      );
-    }
-    
-    // County filter
-    if (filters.county) {
-      const countyLower = filters.county.toLowerCase();
-      filtered = filtered.filter(u => 
-        u.county?.toLowerCase().includes(countyLower)
-      );
-    }
-    
-    // Mentor filter
-    if (filters.isMentor) {
-      filtered = filtered.filter(u => u.isMentor === true);
-    }
-    
-    // Volunteer filter
-    if (filters.isVolunteer) {
-      filtered = filtered.filter(u => u.isVolunteer === true);
-    }
-    
-    setResults(filtered);
-  };
-
-  useEffect(() => {
-    fetchAllUsers();
-  }, []);
-
   const handleSearch = () => {
-    applyFilters(allUsers);
+    if (!searchQuery.trim()) {
+      // Reset to show all mentors
+      const mentorUsers = allUsers.filter(u => u.isMentor === true);
+      setMentors(mentorUsers);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase();
+    const filtered = allUsers.filter(u => 
+      u.isMentor === true && (
+        u.fullName?.toLowerCase().includes(query) ||
+        u.occupation?.toLowerCase().includes(query) ||
+        u.county?.toLowerCase().includes(query) ||
+        u.skills?.some(s => s.skill?.name?.toLowerCase().includes(query))
+      )
+    );
+    setMentors(filtered);
   };
 
-  const clearFilters = () => {
-    setFilters({
-      skill: "",
-      county: "",
-      isMentor: false,
-      isVolunteer: false,
-    });
-    setSearchQuery("");
-    applyFilters(allUsers);
+  const handleSendRequest = async (mentorId) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/mentorship/requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          mentorId,
+          message: requestMessage || 'I would like to request mentorship'
+        })
+      });
+
+      if (response.ok) {
+        toast.success('Mentorship request sent!');
+        setShowRequestModal(false);
+        setSelectedMentor(null);
+        setRequestMessage('');
+        fetchAllData();
+      } else {
+        const error = await response.json();
+        toast.error(error.message || 'Failed to send request');
+      }
+    } catch (error) {
+      console.error('Send request error:', error);
+      toast.error('Failed to send request');
+    }
   };
+
+  const handleUpdateRequest = async (requestId, status) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      if (!token) {
+        navigate('/login');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/mentorship/requests/${requestId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status })
+      });
+
+      if (response.ok) {
+        toast.success(`Request ${status}`);
+        fetchAllData();
+      } else {
+        toast.error('Failed to update request');
+      }
+    } catch (error) {
+      console.error('Update request error:', error);
+      toast.error('Failed to update request');
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const styles = {
+      pending: 'bg-yellow-100 text-yellow-800',
+      accepted: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      cancelled: 'bg-gray-100 text-gray-800',
+      completed: 'bg-blue-100 text-blue-800',
+      scheduled: 'bg-purple-100 text-purple-800',
+    };
+    return styles[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'pending': return <Clock className="w-4 h-4" />;
+      case 'accepted': return <CheckCircle className="w-4 h-4 text-green-600" />;
+      case 'rejected': return <XCircle className="w-4 h-4 text-red-500" />;
+      case 'completed': return <CheckCircle className="w-4 h-4 text-blue-600" />;
+      default: return null;
+    }
+  };
+
+  const tabs = [
+    { id: 'search', label: 'Find Mentors', icon: Search },
+    { id: 'requests', label: 'Requests', icon: UserCheck },
+    { id: 'sessions', label: 'Sessions', icon: Calendar },
+  ];
+
+  if (!isAuthenticated || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+        <Sidebar />
+        <div className="flex-1 md:ml-64 flex items-center justify-center">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-[#00B330] mx-auto" />
+            <p className="mt-4 text-gray-500">Loading mentorship...</p>
+          </div>
+        </div>
+        <BottomNav />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       <Sidebar />
-
       <div className="flex-1 md:ml-64 pb-20 md:pb-0">
         {/* Header */}
-        <div className="bg-white border-b border-gray-100 px-4 py-3 md:px-8 md:py-4 flex items-center justify-between sticky top-0 z-10">
-          <div>
-            <h1 className="text-lg md:text-xl font-semibold text-gray-900">Discover</h1>
-            <p className="text-xs text-gray-500 hidden md:block">Find people with skills you need</p>
+        <div className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
+          <div className="flex items-center justify-between max-w-4xl mx-auto">
+            <div className="flex items-center gap-3">
+              <BookOpen className="w-6 h-6 text-[#00B330]" />
+              <h1 className="text-xl font-semibold text-gray-900">Mentorship</h1>
+            </div>
+            {stats && (
+              <div className="flex items-center gap-3 text-sm">
+                <span className="text-gray-500">
+                  <span className="font-semibold text-[#00B330]">{stats.totalMentors || 0}</span> mentors
+                </span>
+                <span className="text-gray-300">|</span>
+                <span className="text-gray-500">
+                  <span className="font-semibold text-[#00B330]">{requests.filter(r => r.status === 'pending').length || 0}</span> pending
+                </span>
+              </div>
+            )}
           </div>
-          <span className="text-sm text-gray-400">
-            {!loading && results.length > 0 && `${results.length} results`}
-          </span>
         </div>
 
-        <div className="max-w-6xl mx-auto px-4 py-4 md:px-8 md:py-6">
-          {/* Search Bar */}
-          <div className="relative mb-4">
-            <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
-              <Search className="w-5 h-5" />
-            </div>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Search for skills, services or people..."
-              className="w-full pl-12 pr-24 py-3.5 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent text-sm md:text-base placeholder:text-gray-400 shadow-sm hover:shadow-md transition-shadow"
-            />
-            <div className="absolute right-2 top-1.5 flex gap-1">
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`p-2 rounded-xl transition-colors ${
-                  showFilters 
-                    ? 'bg-[#00B330] text-white' 
-                    : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Filter className="w-4 h-4 md:w-5 md:h-5" />
-              </button>
-              <button
-                onClick={handleSearch}
-                className="px-4 md:px-5 py-2 bg-[#00B330] text-white rounded-xl text-sm font-medium hover:bg-[#009f2b] transition-colors shadow-sm hover:shadow-md"
-              >
-                Search
-              </button>
-            </div>
-          </div>
-
-          {/* Filters */}
-          {showFilters && (
-            <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6 mb-6 shadow-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#00B330]" />
-                  Filters
-                </h3>
+        {/* Tabs */}
+        <div className="border-b border-gray-200 bg-white">
+          <div className="max-w-4xl mx-auto px-4 flex gap-1 overflow-x-auto">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
                 <button
-                  onClick={clearFilters}
-                  className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? 'border-[#00B330] text-[#00B330]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
                 >
-                  <X className="w-3 h-3" />
-                  Clear all
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
                 </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">Skill</label>
-                  <input
-                    type="text"
-                    value={filters.skill}
-                    onChange={(e) => setFilters({ ...filters, skill: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent"
-                    placeholder="e.g., Plumbing"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1.5">County</label>
-                  <input
-                    type="text"
-                    value={filters.county}
-                    onChange={(e) => setFilters({ ...filters, county: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00B330] focus:border-transparent"
-                    placeholder="e.g., Nairobi"
-                  />
-                </div>
-                <div className="flex items-end gap-4">
-                  <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={filters.isMentor}
-                      onChange={(e) => setFilters({ ...filters, isMentor: e.target.checked })}
-                      className="w-4 h-4 text-[#00B330] focus:ring-[#00B330] rounded"
-                    />
-                    <span className="text-xs">Mentors</span>
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={filters.isVolunteer}
-                      onChange={(e) => setFilters({ ...filters, isVolunteer: e.target.checked })}
-                      className="w-4 h-4 text-[#00B330] focus:ring-[#00B330] rounded"
-                    />
-                    <span className="text-xs">Volunteers</span>
-                  </label>
-                </div>
-              </div>
-              <button
-                onClick={handleSearch}
-                className="mt-4 w-full py-2.5 bg-[#00B330] text-white rounded-xl font-medium hover:bg-[#009f2b] transition-colors text-sm"
-              >
-                Apply Filters
-              </button>
-            </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          {activeTab === 'search' && (
+            <SearchTab
+              mentors={mentors}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onSearch={handleSearch}
+              onSelectMentor={(mentor) => {
+                setSelectedMentor(mentor);
+                setShowRequestModal(true);
+              }}
+              loading={loading}
+            />
           )}
 
-          {/* Results - Cards Layout */}
-          {loading ? (
-            <div className="text-center py-16">
-              <div className="w-10 h-10 border-3 border-[#00B330] border-t-transparent rounded-full animate-spin mx-auto"></div>
-              <p className="mt-4 text-gray-500 text-sm">Loading...</p>
-            </div>
-          ) : results.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
-              <User className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900">No results found</h3>
-              <p className="text-sm text-gray-500 mt-1">Try adjusting your search or filters</p>
-              <button
-                onClick={clearFilters}
-                className="mt-4 px-6 py-2 bg-[#00B330] text-white rounded-xl text-sm font-medium hover:bg-[#009f2b] transition-colors"
-              >
-                Clear Filters
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
-              {results.map((user) => (
-                <div
-                  key={user.id}
-                  className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer"
-                  onClick={() => navigate(`/profile/${user.id}`)}
-                >
-                  {/* Card Header */}
-                  <div className="relative p-4 pb-0">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          {user.profilePhoto ? (
-                            <img 
-                              src={user.profilePhoto} 
-                              alt={user.fullName}
-                              className="w-14 h-14 rounded-xl object-cover border-2 border-gray-100"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.parentElement.innerHTML = `<div class="w-14 h-14 rounded-xl bg-gradient-to-br from-[#00B330] to-[#008A26] flex items-center justify-center text-white font-bold text-xl">${user.fullName?.charAt(0) || 'U'}</div>`;
-                              }}
-                            />
-                          ) : (
-                            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#00B330] to-[#008A26] flex items-center justify-center text-white font-bold text-xl">
-                              {user.fullName?.charAt(0) || "U"}
-                            </div>
-                          )}
-                          {user.isMentor && (
-                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#00B330] rounded-full flex items-center justify-center border-2 border-white">
-                              <Star className="w-3 h-3 text-white fill-white" />
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-gray-900 text-base leading-tight">
-                            {user.fullName}
-                          </h3>
-                          <p className="text-sm text-gray-500">
-                            {user.occupation || "Community Member"}
-                          </p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toast.success('Added to favorites!');
-                        }}
-                        className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
-                      >
-                        <Heart className="w-5 h-5 text-gray-300 hover:text-red-500 transition-colors" />
-                      </button>
-                    </div>
-                  </div>
+          {activeTab === 'requests' && (
+            <RequestsTab 
+              requests={requests} 
+              onUpdate={handleUpdateRequest}
+              userId={userId}
+            />
+          )}
 
-                  {/* Tags */}
-                  <div className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {user.skills?.length > 0 ? (
-                        user.skills.slice(0, 3).map((skill) => (
-                          <span 
-                            key={skill.id}
-                            className="px-2.5 py-1 bg-[#00B330]/10 text-[#00B330] text-xs rounded-lg font-medium"
-                          >
-                            {skill.skill?.name || "Skill"}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="px-2.5 py-1 bg-gray-100 text-gray-500 text-xs rounded-lg">
-                          No skills listed
-                        </span>
-                      )}
-                      {user.skills?.length > 3 && (
-                        <span className="px-2.5 py-1 bg-gray-100 text-gray-500 text-xs rounded-lg font-medium">
-                          +{user.skills.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Card Footer */}
-                  <div className="px-4 py-3 border-t border-gray-50 bg-gray-50/50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-xs text-gray-500">
-                        {user.county && (
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5" />
-                            {user.county}
-                          </span>
-                        )}
-                        {user.isMentor && (
-                          <span className="text-[#00B330] font-medium text-xs">Mentor</span>
-                        )}
-                        {user.isVolunteer && (
-                          <span className="text-blue-500 font-medium text-xs">Volunteer</span>
-                        )}
-                      </div>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/profile/${user.id}`);
-                        }}
-                        className="px-4 py-1.5 bg-[#00B330] text-white text-xs font-medium rounded-lg hover:bg-[#009f2b] transition-colors shadow-sm hover:shadow-md"
-                      >
-                        Connect
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {activeTab === 'sessions' && (
+            <SessionsTab 
+              sessions={sessions} 
+              userId={userId}
+            />
           )}
         </div>
       </div>
 
+      {/* Request Modal */}
+      {showRequestModal && selectedMentor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Request Mentorship</h2>
+              <button 
+                onClick={() => {
+                  setShowRequestModal(false);
+                  setSelectedMentor(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-[#00B330]/10 flex items-center justify-center text-[#00B330] font-bold text-lg">
+                {selectedMentor.fullName?.charAt(0) || 'M'}
+              </div>
+              <div>
+                <h3 className="font-medium text-gray-900">{selectedMentor.fullName}</h3>
+                <p className="text-sm text-gray-500">{selectedMentor.occupation || 'Mentor'}</p>
+                {selectedMentor.skills && selectedMentor.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedMentor.skills.slice(0, 2).map((skill) => (
+                      <span key={skill.id} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                        {skill.skill?.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Message (Optional)
+              </label>
+              <textarea
+                value={requestMessage}
+                onChange={(e) => setRequestMessage(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00B330] focus:border-transparent"
+                rows={3}
+                placeholder="Tell them why you'd like mentorship..."
+              />
+            </div>
+
+            <button
+              onClick={() => handleSendRequest(selectedMentor.id)}
+              className="w-full py-2.5 bg-[#00B330] text-white rounded-lg hover:bg-[#009f2b] transition font-medium"
+            >
+              Send Request
+            </button>
+          </div>
+        </div>
+      )}
+
       <BottomNav />
+    </div>
+  );
+}
+
+// ============ SEARCH TAB ============
+function SearchTab({ mentors, searchQuery, setSearchQuery, onSearch, onSelectMentor, loading }) {
+  return (
+    <div>
+      <div className="flex gap-2 mb-6">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onSearch()}
+          placeholder="Search mentors by name, skill, or expertise..."
+          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00B330] focus:border-transparent"
+        />
+        <button
+          onClick={onSearch}
+          className="px-4 py-2 bg-[#00B330] text-white rounded-lg hover:bg-[#009f2b] transition flex items-center gap-2"
+        >
+          <Search className="w-4 h-4" />
+          Search
+        </button>
+      </div>
+
+      {mentors.length === 0 ? (
+        <div className="text-center py-12">
+          <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900">No Mentors Found</h3>
+          <p className="text-gray-500">No users have been designated as mentors yet.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {mentors.map((mentor) => (
+            <div key={mentor.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-full bg-[#00B330]/10 flex items-center justify-center text-[#00B330] font-bold text-lg flex-shrink-0">
+                  {mentor.fullName?.charAt(0) || 'M'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="font-medium text-gray-900 truncate">{mentor.fullName}</h4>
+                  <p className="text-sm text-gray-500 truncate">{mentor.occupation || 'Mentor'}</p>
+                  {mentor.skills && mentor.skills.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {mentor.skills.slice(0, 3).map((skill) => (
+                        <span key={skill.id} className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                          {skill.skill?.name}
+                        </span>
+                      ))}
+                      {mentor.skills.length > 3 && (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">
+                          +{mentor.skills.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => onSelectMentor(mentor)}
+                  className="px-3 py-1.5 bg-[#00B330]/10 text-[#00B330] text-sm rounded-lg hover:bg-[#00B330] hover:text-white transition flex items-center gap-1"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Request
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ REQUESTS TAB ============
+function RequestsTab({ requests, onUpdate, userId }) {
+  if (requests.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <UserCheck className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900">No Requests</h3>
+        <p className="text-gray-500">You don't have any mentorship requests yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {requests.map((request) => {
+        const isMentor = request.mentorId === userId;
+        const otherPerson = isMentor ? request.mentee : request.mentor;
+        const canAct = isMentor && request.status === 'pending';
+
+        return (
+          <div key={request.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold text-lg flex-shrink-0">
+                  {otherPerson?.fullName?.charAt(0) || 'U'}
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900">{otherPerson?.fullName || 'Unknown'}</h4>
+                  <p className="text-sm text-gray-500">{isMentor ? 'Requested mentorship from you' : 'You requested mentorship from'}</p>
+                  {request.skill && (
+                    <span className="inline-block mt-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                      {request.skill.name}
+                    </span>
+                  )}
+                  {request.message && (
+                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">{request.message}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-1">
+                    {new Date(request.requestedAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusBadge(request.status)}`}>
+                  {getStatusIcon(request.status)}
+                  {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                </span>
+                {canAct && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onUpdate(request.id, 'accepted')}
+                      className="px-3 py-1 bg-green-500 text-white text-xs rounded-lg hover:bg-green-600"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => onUpdate(request.id, 'rejected')}
+                      className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                )}
+                {request.status === 'pending' && !isMentor && (
+                  <button
+                    onClick={() => onUpdate(request.id, 'cancelled')}
+                    className="text-xs text-red-500 hover:text-red-700"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ============ SESSIONS TAB ============
+function SessionsTab({ sessions, userId }) {
+  if (sessions.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900">No Sessions</h3>
+        <p className="text-gray-500">You don't have any mentorship sessions scheduled.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {sessions.map((session) => {
+        const isMentor = session.mentorId === userId;
+        const otherPerson = isMentor ? session.mentee : session.mentor;
+
+        return (
+          <div key={session.id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold text-lg flex-shrink-0">
+                  {otherPerson?.fullName?.charAt(0) || 'U'}
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900">
+                    {isMentor ? 'With ' : 'With '} {otherPerson?.fullName || 'Unknown'}
+                  </h4>
+                  <p className="text-sm text-gray-500">
+                    {isMentor ? 'You are mentoring' : 'Being mentored by'}
+                  </p>
+                  {session.request?.skill && (
+                    <span className="inline-block mt-1 px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full">
+                      {session.request.skill.name}
+                    </span>
+                  )}
+                  <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(session.scheduledAt).toLocaleDateString()}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {new Date(session.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${getStatusBadge(session.status)}`}>
+                {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
+              </span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

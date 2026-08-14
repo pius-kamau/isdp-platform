@@ -24,6 +24,8 @@ export default function Profile() {
   const [isEditing, setIsEditing] = useState(false);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
   
+  console.log('isEditing state:', isEditing);
+  
   const [editForm, setEditForm] = useState({
     fullName: "",
     bio: "",
@@ -47,35 +49,17 @@ export default function Profile() {
         setLoading(true);
         const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
         
-        // Get current user info from stored data
         const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
         const currentUserId = storedUser.id;
         
-        // CRITICAL FIX: Use current user's ID if no ID in URL
-        let userIdToFetch = id;
-        if (!userIdToFetch) {
-          console.log('No ID in URL, using current user ID:', currentUserId);
-          userIdToFetch = currentUserId;
-        }
-        
-        // If still no ID, show error
-        if (!userIdToFetch) {
-          console.error('No user ID found!');
-          setError('Please log in to view your profile');
-          setLoading(false);
-          return;
-        }
-        
-        console.log('Fetching user ID:', userIdToFetch);
-        
-        const response = await fetch(`${API_URL}/users/${userIdToFetch}`, {
+        const response = await fetch(`${API_URL}/users/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await response.json();
         const userData = data.data;
         setUser(userData);
         
-        setIsOwnProfile(currentUserId === userIdToFetch || currentUserId === userData.id);
+        setIsOwnProfile(currentUserId === id || currentUserId === userData.id);
         
         setEditForm({
           fullName: userData.fullName || "",
@@ -98,8 +82,9 @@ export default function Profile() {
       }
     };
 
-    // ALWAYS fetch - remove the if (id) check
-    fetchUser();
+    if (id) {
+      fetchUser();
+    }
   }, [id, navigate]);
 
   const handleEditChange = (e) => {
@@ -124,7 +109,7 @@ export default function Profile() {
         isVolunteer: editForm.isVolunteer,
       };
       
-      const response = await fetch(`${API_URL}/users/${user.id}`, {
+      const response = await fetch(`${API_URL}/users/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -158,7 +143,7 @@ export default function Profile() {
       reader.onload = async (event) => {
         setUser(prev => ({ ...prev, profilePhoto: event.target.result }));
         
-        await fetch(`${API_URL}/users/${user.id}`, {
+        await fetch(`${API_URL}/users/${id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -342,6 +327,9 @@ export default function Profile() {
   };
 
   const handleAddQualification = async () => {
+    console.log('=== ADD QUALIFICATION ===');
+    console.log('newQualification:', newQualification);
+    
     if (!newQualification.name || !newQualification.issuer) {
       toast.error('Please fill in name and issuer');
       return;
@@ -353,6 +341,7 @@ export default function Profile() {
       let fileUrl = null;
       
       if (newQualification.file) {
+        console.log('Uploading file:', newQualification.file);
         const formData = new FormData();
         formData.append('file', newQualification.file);
         
@@ -363,7 +352,10 @@ export default function Profile() {
         });
         
         const uploadData = await uploadResponse.json();
+        console.log('Upload response:', uploadData);
         fileUrl = uploadData.data.fileUrl;
+      } else {
+        console.log('No file to upload');
       }
       
       const response = await fetch(`${API_URL}/profile/qualification`, {
@@ -381,6 +373,7 @@ export default function Profile() {
       });
       
       const data = await response.json();
+      console.log('Qualification response:', data);
       
       setUser(prev => ({
         ...prev,
@@ -390,6 +383,7 @@ export default function Profile() {
       toast.success('Qualification added successfully!');
     } catch (err) {
       console.error('Error adding qualification:', err);
+      console.error('Error response:', err.response);
       toast.error(err.response?.data?.message || 'Failed to add qualification');
     }
   };
@@ -529,7 +523,7 @@ export default function Profile() {
   };
 
   const handleSendMessage = () => {
-    navigate(`/messages?userId=${user.id}`);
+    navigate(`/messages?userId=${id}`);
   };
 
   if (loading) {
@@ -569,6 +563,7 @@ export default function Profile() {
     <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
       <Sidebar />
       <div className="flex-1 md:ml-64">
+        {/* Header */}
         <div className="bg-white border-b border-gray-100 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -687,6 +682,7 @@ export default function Profile() {
             ) : null}
           </div>
 
+          {/* Edit Mode - Quick Info (only for own profile) */}
           {isEditing && isOwnProfile && (
             <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8 space-y-4">
               <h3 className="text-sm font-medium text-gray-900">Quick Information</h3>
@@ -758,6 +754,7 @@ export default function Profile() {
             </div>
           )}
 
+          {/* Skills - Only show add button for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -806,6 +803,7 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Experience - Only show add/delete for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Briefcase className="w-4 h-4 text-[#00B330]" /> Experience
@@ -869,6 +867,7 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Qualifications - Only show add/delete for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Award className="w-4 h-4 text-[#00B330]" /> Qualifications
@@ -896,38 +895,95 @@ export default function Profile() {
                       className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
                       placeholder="Year"
                     />
-                    <label className="flex items-center gap-2 px-3 py-1 bg-gray-50 border border-gray-200 rounded-lg text-sm cursor-pointer hover:bg-gray-100">
-                      <Upload className="w-4 h-4 text-gray-500" />
-                      <span className="text-gray-600">File</span>
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => setNewQualification({...newQualification, file: e.target.files[0]})}
-                      />
-                    </label>
                     <button
-                      onClick={handleAddQualification}
+                      onClick={() => {
+                        console.log('Add qualification button clicked');
+                        handleAddQualification();
+                      }}
                       className="px-3 py-1 bg-[#00B330] text-white rounded-lg text-sm hover:bg-[#009f2b]"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
                   </div>
-                  {newQualification.file && (
-                    <p className="text-xs text-gray-500">Selected file: {newQualification.file.name}</p>
-                  )}
+
+                  {/* File Upload with Drag and Drop */}
+                  <div 
+                    className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
+                      newQualification.file ? 'border-[#00B330] bg-[#00B330]/5' : 'border-gray-300 hover:border-[#00B330]'
+                    }`}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.currentTarget.classList.add('border-[#00B330]', 'bg-[#00B330]/5');
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.currentTarget.classList.remove('border-[#00B330]', 'bg-[#00B330]/5');
+                      const files = e.dataTransfer.files;
+                      if (files && files.length > 0) {
+                        const file = files[0];
+                        console.log('File dropped:', file);
+                        setNewQualification({...newQualification, file: file});
+                        toast.success(`File selected: ${file.name}`);
+                      }
+                    }}
+                  >
+                    <input
+                      type="file"
+                      id="certificate-upload"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0];
+                          console.log('File selected via input:', file);
+                          setNewQualification({...newQualification, file: file});
+                          toast.success(`File selected: ${file.name}`);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="certificate-upload"
+                      className="cursor-pointer block"
+                    >
+                      <Upload className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">Drag and drop or click to upload certificate</p>
+                      <p className="text-xs text-gray-400">PDF, PNG, JPG (Max 5MB)</p>
+                      {newQualification.file && (
+                        <p className="mt-2 text-sm text-[#00B330]">✅ {newQualification.file.name}</p>
+                      )}
+                    </label>
+                  </div>
                 </>
               )}
+
               {user.qualifications?.length > 0 ? (
                 <div className="space-y-3">
                   {user.qualifications.map((qual) => (
                     <div key={qual.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
                       <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center flex-shrink-0">
-                        <FileText className="w-4 h-4 text-blue-600" />
+                        <FileText className="w-4 h-4 text-blue-500" />
                       </div>
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-900">{qual.name}</h4>
                         <p className="text-sm text-gray-600">{qual.issuer}</p>
                         <p className="text-xs text-gray-400">{qual.year}</p>
+                        {qual.fileUrl && (
+                          <a 
+                            href={`https://isdp-backend.onrender.com${qual.fileUrl}`}
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-xs text-[#00B330] hover:underline flex items-center gap-1 mt-1"
+                          >
+                            <FileText className="w-3 h-3" /> View Certificate
+                          </a>
+                        )}
                       </div>
                       {isOwnProfile && (
                         <button
@@ -946,6 +1002,7 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Volunteering - Only show add/delete for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Heart className="w-4 h-4 text-[#00B330]" /> Volunteering
@@ -958,7 +1015,7 @@ export default function Profile() {
                     value={newVolunteering.title}
                     onChange={(e) => setNewVolunteering({...newVolunteering, title: e.target.value})}
                     className="flex-1 min-w-[100px] px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
-                    placeholder="Title"
+                    placeholder="Opportunity"
                   />
                   <input
                     value={newVolunteering.organization}
@@ -984,8 +1041,8 @@ export default function Profile() {
                 <div className="space-y-3">
                   {user.volunteering.map((vol) => (
                     <div key={vol.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
-                        <Heart className="w-4 h-4 text-red-500" />
+                      <div className="w-10 h-10 rounded-full bg-pink-50 flex items-center justify-center flex-shrink-0">
+                        <Heart className="w-4 h-4 text-pink-500" />
                       </div>
                       <div className="flex-1">
                         <h4 className="font-medium text-gray-900">{vol.title}</h4>
@@ -1009,6 +1066,7 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Availability - Only show add/delete for own profile */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Clock className="w-4 h-4 text-[#00B330]" /> Availability
@@ -1020,7 +1078,7 @@ export default function Profile() {
                   <select
                     value={newAvailability.day}
                     onChange={(e) => setNewAvailability({...newAvailability, day: e.target.value})}
-                    className="px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none bg-white"
+                    className="px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
                   >
                     <option value="">Day</option>
                     <option value="Monday">Monday</option>
@@ -1034,16 +1092,14 @@ export default function Profile() {
                   <input
                     value={newAvailability.start}
                     onChange={(e) => setNewAvailability({...newAvailability, start: e.target.value})}
-                    className="w-24 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
                     placeholder="Start"
-                    type="time"
                   />
                   <input
                     value={newAvailability.end}
                     onChange={(e) => setNewAvailability({...newAvailability, end: e.target.value})}
-                    className="w-24 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
+                    className="w-20 px-3 py-1 border border-gray-200 rounded-lg text-sm focus:border-[#00B330] outline-none"
                     placeholder="End"
-                    type="time"
                   />
                   <button
                     onClick={handleAddAvailability}
@@ -1054,15 +1110,13 @@ export default function Profile() {
                 </div>
               )}
               {user.availability?.length > 0 ? (
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {user.availability.map((avail) => (
-                    <div key={avail.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                      <div className="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0">
-                        <Clock className="w-4 h-4 text-purple-600" />
-                      </div>
+                    <div key={avail.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                      <Calendar className="w-4 h-4 text-gray-400" />
                       <div className="flex-1">
-                        <h4 className="font-medium text-gray-900">{avail.day}</h4>
-                        <p className="text-sm text-gray-600">{avail.start} - {avail.end}</p>
+                        <h4 className="font-medium text-gray-900 text-sm">{avail.day}</h4>
+                        <p className="text-xs text-gray-500">{avail.start} - {avail.end}</p>
                       </div>
                       {isOwnProfile && (
                         <button
@@ -1076,10 +1130,22 @@ export default function Profile() {
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">No availability set yet</p>
+                <p className="text-sm text-gray-400">No availability set</p>
               )}
             </div>
           </div>
+
+          {/* Save Button - Only for own profile */}
+          {isEditing && isOwnProfile && (
+            <div className="sticky bottom-0 pb-4 pt-2 bg-[#f7f8f7] z-10">
+              <button
+                onClick={handleSave}
+                className="w-full py-3.5 bg-[#00B330] text-white rounded-xl font-medium hover:bg-[#009f2b] transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#00B330]/20"
+              >
+                <Save className="w-5 h-5" /> Save All Changes
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <div className="md:hidden"><BottomNav /></div>

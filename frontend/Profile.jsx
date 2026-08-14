@@ -51,19 +51,16 @@ export default function Profile() {
         const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
         const currentUserId = storedUser.id;
         
-        // CRITICAL FIX: Use current user's ID if no ID in URL
+        // FIX: If no ID in URL, use the current user's ID (viewing own profile)
         let userIdToFetch = id;
         if (!userIdToFetch) {
           console.log('No ID in URL, using current user ID:', currentUserId);
           userIdToFetch = currentUserId;
-        }
-        
-        // If still no ID, show error
-        if (!userIdToFetch) {
-          console.error('No user ID found!');
-          setError('Please log in to view your profile');
-          setLoading(false);
-          return;
+          if (!userIdToFetch) {
+            setError('Please log in to view your profile');
+            setLoading(false);
+            return;
+          }
         }
         
         console.log('Fetching user ID:', userIdToFetch);
@@ -98,7 +95,6 @@ export default function Profile() {
       }
     };
 
-    // ALWAYS fetch - remove the if (id) check
     fetchUser();
   }, [id, navigate]);
 
@@ -569,6 +565,7 @@ export default function Profile() {
     <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
       <Sidebar />
       <div className="flex-1 md:ml-64">
+        {/* Header */}
         <div className="bg-white border-b border-gray-100 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -687,6 +684,7 @@ export default function Profile() {
             ) : null}
           </div>
 
+          {/* Edit Mode - Quick Info (only for own profile) */}
           {isEditing && isOwnProfile && (
             <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8 space-y-4">
               <h3 className="text-sm font-medium text-gray-900">Quick Information</h3>
@@ -758,6 +756,7 @@ export default function Profile() {
             </div>
           )}
 
+          {/* Skills */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -806,6 +805,7 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Experience */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Briefcase className="w-4 h-4 text-[#00B330]" /> Experience
@@ -869,6 +869,7 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Qualifications */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Award className="w-4 h-4 text-[#00B330]" /> Qualifications
@@ -946,6 +947,7 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Volunteering */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Heart className="w-4 h-4 text-[#00B330]" /> Volunteering
@@ -1009,6 +1011,7 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* Availability */}
           <div className="bg-white rounded-xl md:rounded-2xl border border-gray-100 p-6 md:p-8">
             <h3 className="text-sm font-medium text-gray-700 flex items-center gap-2 mb-4">
               <Clock className="w-4 h-4 text-[#00B330]" /> Availability
