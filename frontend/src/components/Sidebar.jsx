@@ -1,15 +1,29 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, Compass, GraduationCap, MessageCircle, 
-  User, Settings, Shield, LogOut, 
-  ChevronLeft, ChevronRight
+  User, Settings, LogOut, 
+  ChevronLeft, ChevronRight, LayoutDashboard
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSidebar } from '../context/SidebarContext';
 
 export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, toggleCollapse } = useSidebar();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        setIsAdmin(user.role === 'admin' || user.email === 'piusmwangi611@gmail.com');
+      }
+    } catch (e) {
+      setIsAdmin(false);
+    }
+  }, []);
 
   const menuItems = [
     { path: '/home', icon: Home, label: 'Home' },
@@ -19,6 +33,12 @@ export default function Sidebar() {
     { path: '/profile', icon: User, label: 'Profile' },
     { path: '/settings', icon: Settings, label: 'Settings' },
   ];
+
+  // Add Admin menu item only if user is admin
+  const allMenuItems = [...menuItems];
+  if (isAdmin) {
+    allMenuItems.push({ path: '/admin', icon: LayoutDashboard, label: 'Admin' });
+  }
 
   const isActive = (path) => {
     if (path === '/home' && location.pathname === '/') return true;
@@ -37,9 +57,13 @@ export default function Sidebar() {
 
   return (
     <div
-      className={`hidden md:flex fixed top-0 left-0 h-full z-40 transition-all duration-300 ${
-        collapsed ? 'w-20' : 'w-64'
-      } bg-white border-r border-gray-200 flex-col`}
+      className={`
+        hidden md:flex
+        fixed top-0 left-0 h-full z-40 transition-all duration-300
+        ${collapsed ? 'w-20' : 'w-64'}
+        bg-white border-r border-gray-200
+        flex-col
+      `}
     >
       {/* Logo */}
       <div className={`flex items-center h-16 px-4 border-b border-gray-200`}>
@@ -61,7 +85,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-1">
-        {menuItems.map((item) => {
+        {allMenuItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
           return (
@@ -83,7 +107,6 @@ export default function Sidebar() {
 
       {/* Bottom Actions */}
       <div className="border-t border-gray-200 p-2 space-y-1">
-        {/* Logout */}
         <button
           onClick={handleLogout}
           className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors w-full text-red-600 hover:bg-red-50 ${
@@ -94,9 +117,8 @@ export default function Sidebar() {
           {!collapsed && <span className="text-sm font-medium">Logout</span>}
         </button>
 
-        {/* Collapse Toggle */}
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggleCollapse}
           className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors w-full text-gray-600 hover:bg-gray-100 ${
             collapsed ? 'justify-center' : ''
           }`}

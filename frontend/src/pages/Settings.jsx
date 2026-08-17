@@ -266,7 +266,7 @@ export default function Settings() {
         darkMode ? 'bg-gray-900' : 'bg-gray-50'
       } flex flex-col md:flex-row`}>
 
-        <div className="flex-1 md:ml-64 pb-20 md:pb-0">
+        <div className="flex-1  pb-20 md:pb-0">
           {/* Header */}
           <div className={`sticky top-0 z-10 px-4 py-4 md:px-8 md:py-4 border-b transition-colors duration-300 ${
             darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'

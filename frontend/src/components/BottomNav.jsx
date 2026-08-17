@@ -1,103 +1,65 @@
-import { NavLink } from "react-router-dom";
-import { Home, Search, BookOpen, MessageCircle, User, Settings, LayoutDashboard } from "lucide-react";
-import { useState, useEffect } from "react";
-import { useTheme } from "../context/ThemeContext";
-
-const API_URL = 'https://isdp-backend.onrender.com/api';
+import { Link, useLocation } from 'react-router-dom';
+import { Home, Compass, GraduationCap, MessageCircle, User, Settings, LayoutDashboard } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 export default function BottomNav() {
-  const { darkMode } = useTheme();
-  const [userId, setUserId] = useState(null);
+  const location = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     try {
-      const userStr = localStorage.getItem('user') || sessionStorage.getItem('user');
+      const userStr = localStorage.getItem('user');
       if (userStr) {
         const user = JSON.parse(userStr);
-        if (user && user.id) {
-          setUserId(user.id);
-        }
-        // Check if user is admin
-        if (user.role === 'admin' || 
-            user.email === 'piusmwangi611@gmail.com') {
-          setIsAdmin(true);
-        }
-        // Fetch unread count
-        fetchUnreadCount(user.id);
+        setIsAdmin(user.role === 'admin' || user.email === 'piusmwangi611@gmail.com');
       }
     } catch (e) {
-      console.error('Error getting user:', e);
+      setIsAdmin(false);
     }
   }, []);
 
-  const fetchUnreadCount = async (userId) => {
-    try {
-      const token = localStorage.getItem('accessToken');
-      if (!token) return;
-
-      const response = await fetch(`${API_URL}/messages/unread`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      
-      if (data.status === 'success') {
-        setUnreadCount(data.data.unreadCount || 0);
-      }
-    } catch (error) {
-      console.error('Error fetching unread count:', error);
-    }
-  };
-
   const navItems = [
-    { to: "/home", label: "Home", icon: Home },
-    { to: "/discover", label: "Discover", icon: Search },
-    { to: "/mentorship", label: "Mentorship", icon: BookOpen },
-    { to: "/messages", label: "Messages", icon: MessageCircle },
-    { to: userId ? `/profile/${userId}` : "/profile", label: "Profile", icon: User },
-    { to: "/settings", label: "Settings", icon: Settings },
+    { path: '/home', icon: Home, label: 'Home' },
+    { path: '/discover', icon: Compass, label: 'Discover' },
+    { path: '/mentorship', icon: GraduationCap, label: 'Mentorship' },
+    { path: '/messages', icon: MessageCircle, label: 'Messages' },
+    { path: '/profile', icon: User, label: 'Profile' },
+    { path: '/settings', icon: Settings, label: 'Settings' },
   ];
 
+  // Add Admin nav item only if user is admin
+  const allNavItems = [...navItems];
   if (isAdmin) {
-    navItems.push({ to: "/admin", label: "Admin", icon: LayoutDashboard });
+    allNavItems.push({ path: '/admin', icon: LayoutDashboard, label: 'Admin' });
   }
 
+  const isActive = (path) => {
+    if (path === '/home' && location.pathname === '/') return true;
+    return location.pathname.startsWith(path);
+  };
+
   return (
-    <nav className={`md:hidden fixed bottom-0 left-0 right-0 border-t z-50 transition-colors duration-300 ${
-      darkMode 
-        ? 'bg-gray-900 border-gray-700' 
-        : 'bg-white border-gray-200'
-    }`}>
-      <div className="flex items-center justify-around h-16">
-        {navItems.map((item) => {
+    <div className="block md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200">
+      <div className="flex items-center justify-around px-2 py-1">
+        {allNavItems.map((item) => {
           const Icon = item.icon;
-          const isMessages = item.to === "/messages" || item.to.startsWith("/messages");
-          const count = isMessages ? unreadCount : 0;
-          
+          const active = isActive(item.path);
           return (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center flex-1 h-full transition-colors relative ${
-                  isActive 
-                    ? 'text-[#00B330]' 
-                    : darkMode ? 'text-gray-500' : 'text-gray-500'
-                }`
-              }
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors ${
+                active
+                  ? 'text-[#00B330]'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
             >
               <Icon className="w-5 h-5" />
-              <span className="text-xs mt-0.5">{item.label}</span>
-              {count > 0 && (
-                <span className="absolute -top-0.5 right-1/4 bg-[#00B330] text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                  {count > 99 ? '99+' : count}
-                </span>
-              )}
-            </NavLink>
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </Link>
           );
         })}
       </div>
-    </nav>
+    </div>
   );
 }

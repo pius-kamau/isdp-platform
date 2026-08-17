@@ -7,7 +7,6 @@ import {
   Clock, ChevronRight, MessageCircle, Heart
 } from "lucide-react";
 import BottomNav from "../components/BottomNav";
-import Sidebar from "../components/Sidebar";
 import toast from "react-hot-toast";
 
 const API_URL = 'https://isdp-backend.onrender.com/api';
@@ -141,9 +140,8 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      <Sidebar />
 
-      <div className="flex-1 md:ml-64 pb-20 md:pb-0">
+      <div className="flex-1  pb-20 md:pb-0">
         {/* Header */}
         <header className="bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center sticky top-0 z-10 md:px-8 md:py-4">
           <div className="flex items-center gap-3">

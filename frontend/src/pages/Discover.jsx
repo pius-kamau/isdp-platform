@@ -6,8 +6,6 @@ import {
   Star, Briefcase, Award, ChevronRight, Video,
   Phone, Mail, Loader2, Plus, BookOpen, UserCheck
 } from 'lucide-react';
-import Sidebar from '../components/Sidebar';
-import BottomNav from '../components/BottomNav';
 import toast from 'react-hot-toast';
 
 const API_URL = 'https://isdp-backend.onrender.com/api';
@@ -246,22 +244,19 @@ export default function Mentorship() {
   if (!isAuthenticated || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-        <Sidebar />
-        <div className="flex-1 md:ml-64 flex items-center justify-center">
+        <div className="flex-1  flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-8 h-8 animate-spin text-[#00B330] mx-auto" />
             <p className="mt-4 text-gray-500">Loading mentorship...</p>
           </div>
         </div>
-        <BottomNav />
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      <Sidebar />
-      <div className="flex-1 md:ml-64 pb-20 md:pb-0">
+      <div className="flex-1  pb-20 md:pb-0">
         {/* Header */}
         <div className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10">
           <div className="flex items-center justify-between max-w-4xl mx-auto">
@@ -398,7 +393,6 @@ export default function Mentorship() {
         </div>
       )}
 
-      <BottomNav />
     </div>
   );
 }

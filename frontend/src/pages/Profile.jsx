@@ -7,8 +7,6 @@ import {
   FileText, Upload, Calendar,
   Star, Users, MessageCircle
 } from "lucide-react";
-import Sidebar from "../components/Sidebar";
-import BottomNav from "../components/BottomNav";
 import toast from 'react-hot-toast';
 import { COUNTIES, SUB_COUNTIES } from "../data/counties";
 
@@ -47,18 +45,15 @@ export default function Profile() {
         setLoading(true);
         const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
         
-        // Get current user info from stored data
         const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
         const currentUserId = storedUser.id;
         
-        // CRITICAL FIX: Use current user's ID if no ID in URL
         let userIdToFetch = id;
         if (!userIdToFetch) {
           console.log('No ID in URL, using current user ID:', currentUserId);
           userIdToFetch = currentUserId;
         }
         
-        // If still no ID, show error
         if (!userIdToFetch) {
           console.error('No user ID found!');
           setError('Please log in to view your profile');
@@ -98,7 +93,6 @@ export default function Profile() {
       }
     };
 
-    // ALWAYS fetch - remove the if (id) check
     fetchUser();
   }, [id, navigate]);
 
@@ -535,14 +529,12 @@ export default function Profile() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
-        <Sidebar />
-        <div className="flex-1 md:ml-64 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="w-8 h-8 border-2 border-[#00B330] border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p className="mt-4 text-gray-500">Loading profile...</p>
           </div>
         </div>
-        <div className="md:hidden"><BottomNav /></div>
       </div>
     );
   }
@@ -550,8 +542,7 @@ export default function Profile() {
   if (error || !user) {
     return (
       <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
-        <Sidebar />
-        <div className="flex-1 md:ml-64 flex items-center justify-center px-4">
+        <div className="flex-1 flex items-center justify-center px-4">
           <div className="text-center">
             <User className="w-12 h-12 mx-auto text-gray-300 mb-3" />
             <p className="text-gray-500">{error || "User not found"}</p>
@@ -560,15 +551,13 @@ export default function Profile() {
             </button>
           </div>
         </div>
-        <div className="md:hidden"><BottomNav /></div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#f7f8f7] flex flex-col md:flex-row">
-      <Sidebar />
-      <div className="flex-1 md:ml-64">
+      <div className="flex-1">
         <div className="bg-white border-b border-gray-100 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -1080,9 +1069,21 @@ export default function Profile() {
               )}
             </div>
           </div>
+
+          {/* SAVE BUTTON - At the very bottom */}
+          {isEditing && isOwnProfile && (
+            <div className="sticky bottom-0 pb-4 pt-2 bg-[#f7f8f7] z-10">
+              <button
+                onClick={handleSave}
+                className="w-full py-3.5 bg-[#00B330] text-white rounded-xl font-medium hover:bg-[#009f2b] transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#00B330]/20"
+              >
+                <Save className="w-5 h-5" />
+                Save All Changes
+              </button>
+            </div>
+          )}
         </div>
       </div>
-      <div className="md:hidden"><BottomNav /></div>
     </div>
   );
 }

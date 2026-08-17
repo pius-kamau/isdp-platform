@@ -8,10 +8,13 @@ import {
   X, Volume2, VolumeX
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useSocket, useSocketConnection } from '../context/SocketContext';
 
 export default function Messages() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const socket = useSocket();
+  const isConnected = useSocketConnection();
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
@@ -27,9 +30,21 @@ export default function Messages() {
   const [showMenu, setShowMenu] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [typingUsers, setTypingUsers] = useState({});
   const menuRef = useRef(null);
 
   const API_URL = 'https://isdp-backend.onrender.com/api';
+
+  console.log('🔌 Socket connected?', isConnected);
+  console.log('📡 Socket instance:', socket);
+
+  // Scroll to bottom of messages
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -42,6 +57,112 @@ export default function Messages() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Socket event listeners - WITH DEBUGGING
+  useEffect(() => {
+    if (!socket) {
+      console.log('⚠️ Socket not available - skipping event listeners');
+      return;
+    }
+
+    console.log('📡 Setting up socket event listeners...');
+
+    // Listen for ALL messages (debug)
+    socket.onAny((event, ...args) => {
+      console.log('🔊 Socket event received:', event, args);
+    });
+
+    // Listen for new messages
+    socket.on('receive_message', (data) => {
+      console.log('📩 New message received via socket:', data);
+      
+      if (data.senderId !== userId) {
+        toast.success(`📨 New message from ${data.senderName || 'Someone'}`);
+      }
+      
+      // Update messages if in current chat
+      if (selectedUser && data.senderId === selectedUser.id) {
+        const newMsg = {
+          id: data.messageId || Date.now(),
+          messageText: data.content,
+          senderId: data.senderId,
+          receiverId: data.receiverId,
+          createdAt: new Date().toISOString(),
+          isOwn: false,
+          status: 'delivered'
+        };
+        setMessages(prev => [...prev, newMsg]);
+        
+        // Send read receipt
+        setTimeout(() => {
+          if (socket) {
+            socket.emit('message_read', {
+              messageId: data.messageId,
+              senderId: data.senderId
+            });
+            console.log('📤 Sent read receipt for message:', data.messageId);
+          }
+        }, 1000);
+      }
+      
+      // Refresh conversations
+      const token = localStorage.getItem('accessToken');
+      fetchConversations(token);
+    });
+
+    // Listen for message status
+    socket.on('message_status', (data) => {
+      console.log('📊 Message status update:', data);
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId ? { ...msg, status: data.status } : msg
+      ));
+    });
+
+    // Listen for read receipts
+    socket.on('message_read', (data) => {
+      console.log('👁️ Message read receipt received:', data);
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId ? { ...msg, status: 'read' } : msg
+      ));
+    });
+
+    // Listen for online users
+    socket.on('online_users', (users) => {
+      console.log('👥 Online users update:', users);
+      setOnlineUsers(users || []);
+    });
+
+    // Listen for typing status
+    socket.on('user_typing', (data) => {
+      console.log('⌨️ Typing status:', data);
+      setTypingUsers(prev => ({
+        ...prev,
+        [data.userId]: data.isTyping
+      }));
+    });
+
+    // Listen for connection events
+    socket.on('connect', () => {
+      console.log('✅ Socket connected (inside listener)');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('❌ Socket disconnected (inside listener)');
+    });
+
+    return () => {
+      console.log('🧹 Cleaning up socket listeners');
+      socket.offAny();
+      socket.off('receive_message');
+      socket.off('message_status');
+      socket.off('message_read');
+      socket.off('online_users');
+      socket.off('user_typing');
+      socket.off('connect');
+      socket.off('disconnect');
+    };
+  }, [socket, userId, selectedUser]);
+
+  // Get user info on mount
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
     const userStr = localStorage.getItem('user');
@@ -133,7 +254,11 @@ export default function Messages() {
     try {
       const response = await fetchWithAuth(`${API_URL}/messages/${userId}`);
       const data = await response.json();
-      setMessages(data.data || []);
+      const messagesWithStatus = (data.data || []).map(msg => ({
+        ...msg,
+        status: msg.isRead ? 'read' : 'delivered'
+      }));
+      setMessages(messagesWithStatus);
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
@@ -144,34 +269,144 @@ export default function Messages() {
     const token = localStorage.getItem('accessToken');
     fetchMessages(user.id, token);
     setShowMenu(false);
+    
+    if (socket && user.id) {
+      socket.emit('mark_read', { userId: user.id });
+      console.log('📤 Marked messages as read for user:', user.id);
+    }
   };
 
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedUser || sending) return;
 
+    const messageContent = newMessage.trim();
     setSending(true);
+    
+    const tempId = Date.now();
+    const tempMessage = {
+      id: tempId,
+      messageText: messageContent,
+      senderId: userId,
+      receiverId: selectedUser.id,
+      createdAt: new Date().toISOString(),
+      isOwn: true,
+      status: 'sending'
+    };
+    
+    setMessages(prev => [...prev, tempMessage]);
+    setNewMessage('');
+    
+    setConversations(prev => {
+      const updated = [...prev];
+      const convIndex = updated.findIndex(c => 
+        c.participants?.some(p => p.id === selectedUser.id)
+      );
+      if (convIndex !== -1) {
+        const conv = updated[convIndex];
+        if (!conv.messages) conv.messages = [];
+        conv.messages.push({
+          id: tempId,
+          messageText: messageContent,
+          senderId: userId,
+          receiverId: selectedUser.id,
+          createdAt: new Date().toISOString()
+        });
+        conv.lastMessage = messageContent;
+        conv.lastMessageTime = new Date().toISOString();
+        updated.splice(convIndex, 1);
+        updated.unshift(conv);
+      } else {
+        updated.unshift({
+          id: Date.now(),
+          participants: [currentUser, selectedUser],
+          messages: [{
+            id: tempId,
+            messageText: messageContent,
+            senderId: userId,
+            receiverId: selectedUser.id,
+            createdAt: new Date().toISOString()
+          }],
+          lastMessage: messageContent,
+          lastMessageTime: new Date().toISOString()
+        });
+      }
+      return updated;
+    });
+
     try {
+      const token = localStorage.getItem('accessToken');
       const response = await fetchWithAuth(`${API_URL}/messages`, {
         method: 'POST',
         body: JSON.stringify({
           receiverId: selectedUser.id,
-          messageText: newMessage.trim()
+          messageText: messageContent
         }),
       });
       const data = await response.json();
 
-      setMessages(prev => [...prev, data.data]);
-      setNewMessage('');
-      inputRef.current?.focus();
-      const token = localStorage.getItem('accessToken');
-      await fetchConversations(token);
+      const sentMessage = data.data;
+      const realId = sentMessage.id || tempId;
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { 
+          ...sentMessage, 
+          id: realId,
+          isOwn: true,
+          status: 'sent' 
+        } : msg
+      ));
+      
+      // Send via WebSocket
+      if (socket) {
+        console.log('📤 Sending message via socket to:', selectedUser.id);
+        socket.emit('send_message', {
+          receiverId: selectedUser.id,
+          content: messageContent,
+          messageId: realId,
+          senderName: currentUser?.fullName
+        });
+      } else {
+        console.log('⚠️ Socket not available, message sent via REST only');
+      }
+      
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempId ? { ...msg, status: 'error' } : msg
+      ));
     } finally {
       setSending(false);
     }
+  };
+
+  const handleTyping = (e) => {
+    setNewMessage(e.target.value);
+    
+    if (socket && selectedUser) {
+      socket.emit('typing', { 
+        receiverId: selectedUser.id, 
+        isTyping: true 
+      });
+      console.log('⌨️ Sent typing event to:', selectedUser.id);
+      
+      if (window.typingTimeout) {
+        clearTimeout(window.typingTimeout);
+      }
+      
+      window.typingTimeout = setTimeout(() => {
+        if (socket && selectedUser) {
+          socket.emit('typing', { 
+            receiverId: selectedUser.id, 
+            isTyping: false 
+          });
+        }
+      }, 2000);
+    }
+  };
+
+  const isUserOnline = (userId) => {
+    return onlineUsers.includes(userId);
   };
 
   // ============ 3-DOT MENU ACTIONS ============
@@ -198,18 +433,17 @@ export default function Messages() {
     try {
       const token = localStorage.getItem('accessToken');
       
-      // Delete all messages from the database
       const response = await fetchWithAuth(`${API_URL}/messages/clear/${selectedUser.id}`, {
         method: 'DELETE',
+        body: JSON.stringify({ userId: userId })
       });
       
       const data = await response.json();
       
       if (response.ok) {
-        toast.success(data.message || 'Chat cleared successfully');
+        toast.success('Chat cleared from your side');
         setMessages([]);
         setShowClearConfirm(false);
-        // Refresh conversations to update the list
         await fetchConversations(token);
       } else {
         toast.error(data.message || 'Failed to clear chat');
@@ -288,6 +522,25 @@ export default function Messages() {
     );
   };
 
+  const renderMessageStatus = (message) => {
+    if (!message.isOwn) return null;
+    
+    switch (message.status) {
+      case 'sending':
+        return <Clock className="w-3.5 h-3.5 text-gray-400" />;
+      case 'sent':
+        return <CheckCheck className="w-3.5 h-3.5 text-gray-400" />;
+      case 'delivered':
+        return <CheckCheck className="w-3.5 h-3.5 text-[#00B330]" />;
+      case 'read':
+        return <CheckCheck className="w-3.5 h-3.5 text-[#00B330]" />;
+      case 'error':
+        return <XCircle className="w-3.5 h-3.5 text-red-500" />;
+      default:
+        return <CheckCheck className="w-3.5 h-3.5 text-gray-400" />;
+    }
+  };
+
   const filteredConversations = conversations.filter(conv => {
     const otherUser = conv.participants?.find(p => p.id !== userId);
     return otherUser?.fullName?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -298,7 +551,7 @@ export default function Messages() {
   if (isLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-        <div className="flex-1 md:ml-64 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="w-8 h-8 animate-spin text-[#00B330] mx-auto" />
             <p className="mt-4 text-gray-500">Loading...</p>
@@ -311,7 +564,7 @@ export default function Messages() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
       
-      <div className="flex-1 md:ml-64">
+      <div className="flex-1">
         <div className="h-screen flex flex-col md:flex-row">
           {/* Conversations List */}
           <div className={`w-full md:w-80 lg:w-96 bg-white border-r border-gray-200 flex flex-col ${selectedUser ? 'hidden md:flex' : 'flex'}`}>
@@ -320,7 +573,15 @@ export default function Messages() {
                 <MessageCircle className="w-5 h-5 text-[#00B330]" />
                 Messages
               </h1>
-              <span className="text-sm text-gray-400">{conversations.length}</span>
+              <div className="flex items-center gap-2">
+                {isConnected && (
+                  <span className="text-xs text-green-500 flex items-center gap-1">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    Live
+                  </span>
+                )}
+                <span className="text-sm text-gray-400">{conversations.length}</span>
+              </div>
             </div>
 
             <div className="p-3 border-b border-gray-100">
@@ -357,6 +618,8 @@ export default function Messages() {
                   if (!otherUser) return null;
                   
                   const lastMsg = getLastMessage(conv);
+                  const isOnline = isUserOnline(otherUser.id);
+                  const isTyping = typingUsers[otherUser.id];
                   
                   return (
                     <div
@@ -368,12 +631,17 @@ export default function Messages() {
                     >
                       <div className="relative flex-shrink-0">
                         {renderAvatar(otherUser, 'lg')}
-                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
+                        {isOnline && (
+                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
                           <h4 className="font-medium text-gray-900 truncate">
                             {otherUser.fullName}
+                            {isTyping && (
+                              <span className="ml-2 text-xs text-[#00B330] animate-pulse">typing...</span>
+                            )}
                           </h4>
                           {lastMsg && (
                             <span className="text-xs text-gray-400 flex-shrink-0">
@@ -411,7 +679,7 @@ export default function Messages() {
           <div className={`flex-1 flex flex-col bg-gray-50 ${selectedUser ? 'flex' : 'hidden md:flex'}`}>
             {selectedUser ? (
               <>
-                {/* Chat Header with 3-dot menu */}
+                {/* Chat Header */}
                 <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between relative">
                   <div className="flex items-center gap-3">
                     <button
@@ -427,9 +695,18 @@ export default function Messages() {
                       {renderAvatar(selectedUser, 'md')}
                       <div>
                         <h3 className="font-medium text-gray-900">{selectedUser.fullName}</h3>
-                        <p className="text-xs text-green-500 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                          Online
+                        <p className="text-xs flex items-center gap-1">
+                          {isUserOnline(selectedUser.id) ? (
+                            <span className="text-green-500 flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                              Online
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">Offline</span>
+                          )}
+                          {typingUsers[selectedUser.id] && (
+                            <span className="text-[#00B330] ml-1 animate-pulse">• typing...</span>
+                          )}
                         </p>
                       </div>
                     </div>
@@ -441,7 +718,7 @@ export default function Messages() {
                     )}
                   </div>
 
-                  {/* 3-Dot Menu Button */}
+                  {/* 3-Dot Menu */}
                   <div className="relative" ref={menuRef}>
                     <button
                       onClick={() => setShowMenu(!showMenu)}
@@ -450,7 +727,6 @@ export default function Messages() {
                       <MoreVertical className="w-5 h-5" />
                     </button>
 
-                    {/* Dropdown Menu */}
                     {showMenu && (
                       <div className="absolute right-0 top-12 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50 overflow-hidden">
                         <button
@@ -485,7 +761,7 @@ export default function Messages() {
                           className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                         >
                           <Trash2 className="w-4 h-4 text-red-400" />
-                          Clear Chat
+                          Clear Chat (My Side)
                         </button>
 
                         <button
@@ -508,7 +784,7 @@ export default function Messages() {
                   </div>
                 </div>
 
-                {/* Clear Chat Confirmation Modal */}
+                {/* Clear Chat Confirmation */}
                 {showClearConfirm && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
                     <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4">
@@ -522,7 +798,7 @@ export default function Messages() {
                         </button>
                       </div>
                       <p className="text-sm text-gray-600 mb-6">
-                        This will delete all messages in this conversation. This action cannot be undone.
+                        This will clear messages from <strong>your side only</strong>. The other person will still see their messages.
                       </p>
                       <div className="flex gap-3">
                         <button
@@ -535,7 +811,7 @@ export default function Messages() {
                           onClick={confirmClearChat}
                           className="flex-1 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                         >
-                          Clear All
+                          Clear My Side
                         </button>
                       </div>
                     </div>
@@ -593,8 +869,8 @@ export default function Messages() {
                                     {formatTime(msg.createdAt)}
                                   </span>
                                   {isOwn && (
-                                    <span className="text-xs text-[#00B330]">
-                                      <CheckCheck className="w-3.5 h-3.5" />
+                                    <span className="text-xs">
+                                      {renderMessageStatus(msg)}
                                     </span>
                                   )}
                                 </div>
@@ -621,7 +897,7 @@ export default function Messages() {
                       ref={inputRef}
                       type="text"
                       value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
+                      onChange={handleTyping}
                       placeholder={isMuted ? "Chat is muted" : "Type a message..."}
                       disabled={isMuted}
                       className="flex-1 px-4 py-2.5 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#00B330] disabled:opacity-50"
@@ -647,7 +923,6 @@ export default function Messages() {
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900">Your Messages</h3>
                 <p className="text-gray-500 mt-1 max-w-sm">
-                  Select a conversation from the sidebar to start chatting
                 </p>
                 <button
                   onClick={() => navigate('/discover')}
