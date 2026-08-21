@@ -36,7 +36,7 @@ const authController = {
           passwordHash: hashedPassword,
           fullName,
           phone: phone || null,
-          county: county || null,
+          county: county || "Nairobi",
           subCounty: subCounty || null,
           emailVerified: false,
           isActive: true,
