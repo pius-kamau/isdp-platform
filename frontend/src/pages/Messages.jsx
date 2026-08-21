@@ -10,6 +10,8 @@ import {
 import toast from 'react-hot-toast';
 import { useSocket, useSocketConnection } from '../context/SocketContext';
 
+const API_URL = 'https://isdp-backend.onrender.com/api';
+
 export default function Messages() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -33,105 +35,25 @@ export default function Messages() {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState({});
   const menuRef = useRef(null);
+  const [lastMessageCount, setLastMessageCount] = useState(0);
+  const pollingInterval = useRef(null);
 
-  const API_URL = 'https://isdp-backend.onrender.com/api';
-
-  console.log('🔌 Socket connected?', isConnected);
-  console.log('📡 Socket instance:', socket);
-
-  // Scroll to bottom of messages
+  // Socket event listeners
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setShowMenu(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  // Socket event listeners - WITH DEBUGGING
-  useEffect(() => {
-    if (!socket) {
-      console.log('⚠️ Socket not available - skipping event listeners');
-      return;
-    }
+    if (!socket) return;
 
     console.log('📡 Setting up socket event listeners...');
 
-    // Listen for ALL messages (debug)
-    socket.onAny((event, ...args) => {
-      console.log('🔊 Socket event received:', event, args);
-    });
-
-    // Listen for new messages
     socket.on('receive_message', (data) => {
       console.log('📩 New message received via socket:', data);
-      
-      if (data.senderId !== userId) {
-        toast.success(`📨 New message from ${data.senderName || 'Someone'}`);
-      }
-      
-      // Update messages if in current chat
-      if (selectedUser && data.senderId === selectedUser.id) {
-        const newMsg = {
-          id: data.messageId || Date.now(),
-          messageText: data.content,
-          senderId: data.senderId,
-          receiverId: data.receiverId,
-          createdAt: new Date().toISOString(),
-          isOwn: false,
-          status: 'delivered'
-        };
-        setMessages(prev => [...prev, newMsg]);
-        
-        // Send read receipt
-        setTimeout(() => {
-          if (socket) {
-            socket.emit('message_read', {
-              messageId: data.messageId,
-              senderId: data.senderId
-            });
-            console.log('📤 Sent read receipt for message:', data.messageId);
-          }
-        }, 1000);
-      }
-      
-      // Refresh conversations
-      const token = localStorage.getItem('accessToken');
-      fetchConversations(token);
+      handleNewMessage(data);
     });
 
-    // Listen for message status
-    socket.on('message_status', (data) => {
-      console.log('📊 Message status update:', data);
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.messageId ? { ...msg, status: data.status } : msg
-      ));
-    });
-
-    // Listen for read receipts
-    socket.on('message_read', (data) => {
-      console.log('👁️ Message read receipt received:', data);
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.messageId ? { ...msg, status: 'read' } : msg
-      ));
-    });
-
-    // Listen for online users
     socket.on('online_users', (users) => {
       console.log('👥 Online users update:', users);
       setOnlineUsers(users || []);
     });
 
-    // Listen for typing status
     socket.on('user_typing', (data) => {
       console.log('⌨️ Typing status:', data);
       setTypingUsers(prev => ({
@@ -140,37 +62,58 @@ export default function Messages() {
       }));
     });
 
-    // Listen for connection events
-    socket.on('connect', () => {
-      console.log('✅ Socket connected (inside listener)');
-    });
-
-    socket.on('disconnect', () => {
-      console.log('❌ Socket disconnected (inside listener)');
-    });
-
     return () => {
-      console.log('🧹 Cleaning up socket listeners');
-      socket.offAny();
       socket.off('receive_message');
-      socket.off('message_status');
-      socket.off('message_read');
       socket.off('online_users');
       socket.off('user_typing');
-      socket.off('connect');
-      socket.off('disconnect');
     };
-  }, [socket, userId, selectedUser]);
+  }, [socket]);
+
+  // POLLING FALLBACK - Check for new messages every 3 seconds
+  useEffect(() => {
+    // Start polling
+    pollingInterval.current = setInterval(() => {
+      if (selectedUser) {
+        const token = localStorage.getItem('accessToken');
+        fetchMessages(selectedUser.id, token, true); // silent update
+      }
+    }, 3000);
+
+    return () => {
+      if (pollingInterval.current) {
+        clearInterval(pollingInterval.current);
+      }
+    };
+  }, [selectedUser]);
+
+  const handleNewMessage = (data) => {
+    if (data.senderId !== userId) {
+      toast.success(`📨 New message from ${data.senderName || 'Someone'}`);
+    }
+    
+    if (selectedUser && data.senderId === selectedUser.id) {
+      const newMsg = {
+        id: data.messageId || Date.now(),
+        messageText: data.content,
+        senderId: data.senderId,
+        receiverId: data.receiverId,
+        createdAt: new Date().toISOString(),
+        isOwn: false,
+        status: 'delivered'
+      };
+      setMessages(prev => [...prev, newMsg]);
+    }
+    
+    const token = localStorage.getItem('accessToken');
+    fetchConversations(token);
+  };
 
   // Get user info on mount
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
     const userStr = localStorage.getItem('user');
     
-    console.log('🔑 Token exists?', !!token);
-    
     if (!token || !userStr) {
-      console.log('❌ No token - redirecting to login');
       navigate('/login');
       return;
     }
@@ -179,8 +122,6 @@ export default function Messages() {
       const user = JSON.parse(userStr);
       setUserId(user.id);
       setCurrentUser(user);
-      console.log('✅ User ID set:', user.id);
-      console.log('✅ Current user:', user.fullName);
       setIsLoading(false);
       
       fetchConversations(token);
@@ -211,7 +152,6 @@ export default function Messages() {
     });
     
     if (response.status === 401) {
-      console.log('⚠️ 401 Unauthorized');
       if (window.location.pathname !== '/login') {
         navigate('/login');
       }
@@ -224,16 +164,11 @@ export default function Messages() {
   const fetchConversations = async (token) => {
     try {
       setLoading(true);
-      console.log('📡 Fetching conversations...');
       const response = await fetchWithAuth(`${API_URL}/messages/conversations`);
       const data = await response.json();
-      console.log('📡 Conversations:', data);
       setConversations(data.data || []);
     } catch (error) {
-      console.error('❌ Error fetching conversations:', error);
-      if (error.message !== 'Unauthorized') {
-        toast.error('Failed to load conversations');
-      }
+      console.error('Error fetching conversations:', error);
     } finally {
       setLoading(false);
     }
@@ -250,15 +185,25 @@ export default function Messages() {
     }
   };
 
-  const fetchMessages = async (userId, token) => {
+  const fetchMessages = async (userId, token, silent = false) => {
     try {
       const response = await fetchWithAuth(`${API_URL}/messages/${userId}`);
       const data = await response.json();
-      const messagesWithStatus = (data.data || []).map(msg => ({
-        ...msg,
-        status: msg.isRead ? 'read' : 'delivered'
-      }));
-      setMessages(messagesWithStatus);
+      const newMessages = data.data || [];
+      
+      // Check if there are new messages
+      if (newMessages.length > messages.length) {
+        setMessages(newMessages);
+        if (!silent) {
+          // Only show notification for new messages if not silent
+          const newCount = newMessages.length - messages.length;
+          if (newCount > 0) {
+            toast.info(`📨 ${newCount} new message${newCount > 1 ? 's' : ''}`);
+          }
+        }
+      } else if (!silent) {
+        setMessages(newMessages);
+      }
     } catch (error) {
       console.error('Error fetching messages:', error);
     }
@@ -272,7 +217,6 @@ export default function Messages() {
     
     if (socket && user.id) {
       socket.emit('mark_read', { userId: user.id });
-      console.log('📤 Marked messages as read for user:', user.id);
     }
   };
 
@@ -296,43 +240,6 @@ export default function Messages() {
     
     setMessages(prev => [...prev, tempMessage]);
     setNewMessage('');
-    
-    setConversations(prev => {
-      const updated = [...prev];
-      const convIndex = updated.findIndex(c => 
-        c.participants?.some(p => p.id === selectedUser.id)
-      );
-      if (convIndex !== -1) {
-        const conv = updated[convIndex];
-        if (!conv.messages) conv.messages = [];
-        conv.messages.push({
-          id: tempId,
-          messageText: messageContent,
-          senderId: userId,
-          receiverId: selectedUser.id,
-          createdAt: new Date().toISOString()
-        });
-        conv.lastMessage = messageContent;
-        conv.lastMessageTime = new Date().toISOString();
-        updated.splice(convIndex, 1);
-        updated.unshift(conv);
-      } else {
-        updated.unshift({
-          id: Date.now(),
-          participants: [currentUser, selectedUser],
-          messages: [{
-            id: tempId,
-            messageText: messageContent,
-            senderId: userId,
-            receiverId: selectedUser.id,
-            createdAt: new Date().toISOString()
-          }],
-          lastMessage: messageContent,
-          lastMessageTime: new Date().toISOString()
-        });
-      }
-      return updated;
-    });
 
     try {
       const token = localStorage.getItem('accessToken');
@@ -356,17 +263,13 @@ export default function Messages() {
         } : msg
       ));
       
-      // Send via WebSocket
       if (socket) {
-        console.log('📤 Sending message via socket to:', selectedUser.id);
         socket.emit('send_message', {
           receiverId: selectedUser.id,
           content: messageContent,
           messageId: realId,
           senderName: currentUser?.fullName
         });
-      } else {
-        console.log('⚠️ Socket not available, message sent via REST only');
       }
       
     } catch (error) {
@@ -388,7 +291,6 @@ export default function Messages() {
         receiverId: selectedUser.id, 
         isTyping: true 
       });
-      console.log('⌨️ Sent typing event to:', selectedUser.id);
       
       if (window.typingTimeout) {
         clearTimeout(window.typingTimeout);
@@ -407,21 +309,6 @@ export default function Messages() {
 
   const isUserOnline = (userId) => {
     return onlineUsers.includes(userId);
-  };
-
-  // ============ 3-DOT MENU ACTIONS ============
-
-  const handleViewProfile = () => {
-    if (selectedUser) {
-      navigate(`/profile/${selectedUser.id}`);
-      setShowMenu(false);
-    }
-  };
-
-  const handleToggleMute = () => {
-    setIsMuted(!isMuted);
-    toast.success(isMuted ? 'Notifications unmuted' : 'Notifications muted');
-    setShowMenu(false);
   };
 
   const handleClearChat = () => {
@@ -454,18 +341,7 @@ export default function Messages() {
     }
   };
 
-  const handleBlockUser = () => {
-    toast.success('User blocked successfully');
-    setShowMenu(false);
-  };
-
-  const handleReportUser = () => {
-    toast.success('User reported. We will review this shortly.');
-    setShowMenu(false);
-  };
-
-  // ============ UI HELPERS ============
-
+  // UI helpers
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -496,7 +372,6 @@ export default function Messages() {
     return name?.charAt(0) || 'U';
   };
 
-  // ============ AVATAR HELPER ============
   const renderAvatar = (user, size = 'md') => {
     const sizeClasses = {
       sm: 'w-8 h-8 text-xs',
@@ -563,7 +438,6 @@ export default function Messages() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
-      
       <div className="flex-1">
         <div className="h-screen flex flex-col md:flex-row">
           {/* Conversations List */}
@@ -730,7 +604,12 @@ export default function Messages() {
                     {showMenu && (
                       <div className="absolute right-0 top-12 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50 overflow-hidden">
                         <button
-                          onClick={handleViewProfile}
+                          onClick={() => {
+                            if (selectedUser) {
+                              navigate(`/profile/${selectedUser.id}`);
+                            }
+                            setShowMenu(false);
+                          }}
                           className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                         >
                           <User className="w-4 h-4 text-gray-400" />
@@ -738,7 +617,11 @@ export default function Messages() {
                         </button>
 
                         <button
-                          onClick={handleToggleMute}
+                          onClick={() => {
+                            setIsMuted(!isMuted);
+                            toast.success(isMuted ? 'Notifications unmuted' : 'Notifications muted');
+                            setShowMenu(false);
+                          }}
                           className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                         >
                           {isMuted ? (
@@ -765,7 +648,10 @@ export default function Messages() {
                         </button>
 
                         <button
-                          onClick={handleBlockUser}
+                          onClick={() => {
+                            toast.success('User blocked successfully');
+                            setShowMenu(false);
+                          }}
                           className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                         >
                           <AlertCircle className="w-4 h-4 text-red-400" />
@@ -773,7 +659,10 @@ export default function Messages() {
                         </button>
 
                         <button
-                          onClick={handleReportUser}
+                          onClick={() => {
+                            toast.success('User reported. We will review this shortly.');
+                            setShowMenu(false);
+                          }}
                           className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50 transition-colors"
                         >
                           <Flag className="w-4 h-4 text-orange-400" />
@@ -923,6 +812,7 @@ export default function Messages() {
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900">Your Messages</h3>
                 <p className="text-gray-500 mt-1 max-w-sm">
+                  Select a conversation or find someone to chat with
                 </p>
                 <button
                   onClick={() => navigate('/discover')}
@@ -936,7 +826,6 @@ export default function Messages() {
           </div>
         </div>
       </div>
-
     </div>
   );
 }

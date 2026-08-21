@@ -58,8 +58,8 @@ export default function Sidebar() {
   return (
     <div
       className={`
-        hidden md:flex
         fixed top-0 left-0 h-full z-40 transition-all duration-300
+        hidden md:flex
         ${collapsed ? 'w-20' : 'w-64'}
         bg-white border-r border-gray-200
         flex-col
