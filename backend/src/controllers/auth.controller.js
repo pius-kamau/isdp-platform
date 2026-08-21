@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 const authController = {
   async register(req, res) {
     try {
-      const { email, password, fullName, phone } = req.body;
+      const { email, password, fullName, phone, county, subCounty } = req.body;
 
       if (!email || !password || !fullName) {
         return res.status(400).json({
@@ -36,17 +36,52 @@ const authController = {
           passwordHash: hashedPassword,
           fullName,
           phone: phone || null,
+          county: county || null,
+          subCounty: subCounty || null,
           emailVerified: false,
           isActive: true,
           role: 'user'
         }
       });
 
+      // Generate email verification token
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerificationToken: verificationToken,
+          emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        }
+      });
+
+      // Try to send verification email (don't fail if email service isn't configured)
+      try {
+        const mailService = require('../config/mail');
+        const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+        const verifyLink = `${CLIENT_URL}/verify-email?token=${verificationToken}`;
+        
+        await mailService.sendEmail({
+          to: email,
+          subject: 'Welcome to ISDP Platform - Verify Your Email',
+          htmlContent: `
+            <h1>Welcome to ISDP Platform!</h1>
+            <p>Hi ${fullName},</p>
+            <p>Please verify your email by clicking the link below:</p>
+            <a href="${verifyLink}">Verify Email</a>
+            <p>This link expires in 24 hours.</p>
+          `
+        });
+        console.log('✅ Verification email sent to:', email);
+      } catch (emailError) {
+        console.log('⚠️ Could not send verification email:', emailError.message);
+      }
+
       const { passwordHash, ...safeUser } = user;
 
       res.status(201).json({
         status: 'success',
-        message: 'User registered successfully',
+        message: 'User registered successfully. Please verify your email.',
         data: safeUser
       });
     } catch (error) {
@@ -62,9 +97,6 @@ const authController = {
     try {
       const { email, password } = req.body;
 
-      console.log('=== AUTH LOGIN ===');
-      console.log('Email:', email);
-
       if (!email || !password) {
         return res.status(400).json({
           status: 'error',
@@ -77,7 +109,6 @@ const authController = {
       });
 
       if (!user) {
-        console.log('User not found:', email);
         return res.status(401).json({
           status: 'error',
           message: 'Invalid credentials'
@@ -92,7 +123,6 @@ const authController = {
       }
 
       if (!user.passwordHash) {
-        console.log('User has no password set:', email);
         return res.status(401).json({
           status: 'error',
           message: 'Invalid credentials'
@@ -101,14 +131,11 @@ const authController = {
 
       const isValid = await bcrypt.compare(password, user.passwordHash);
       if (!isValid) {
-        console.log('Invalid password for:', email);
         return res.status(401).json({
           status: 'error',
           message: 'Invalid credentials'
         });
       }
-
-      console.log('Password valid for:', email);
 
       await prisma.user.update({
         where: { id: user.id },
@@ -140,8 +167,6 @@ const authController = {
         jwtSecret,
         { expiresIn: '30d' }
       );
-
-      console.log('Login successful for:', email);
 
       const { passwordHash, ...safeUser } = user;
 
@@ -268,46 +293,29 @@ const authController = {
 
   async forgotPassword(req, res) {
     try {
-      console.log('🚀 FORGOT PASSWORD FUNCTION STARTED');
-      console.log('📝 Request body:', req.body);
-      
       const { email } = req.body;
 
-      console.log('📧 Email received:', email);
-
       if (!email) {
-        console.log('❌ No email provided');
         return res.status(400).json({
           status: 'error',
           message: 'Email is required'
         });
       }
 
-      console.log('🔍 Looking for user with email:', email);
-
       const user = await prisma.user.findUnique({
         where: { email }
       });
 
-      console.log('👤 User found:', user ? 'Yes - ' + user.id : 'No');
-
       if (!user) {
-        console.log('❌ User not found, returning success message');
         return res.json({
           status: 'success',
           message: 'If your email is registered, you will receive a password reset link'
         });
       }
 
-      console.log('🔑 Generating reset token for user:', user.id);
-
       const resetToken = crypto.randomBytes(32).toString('hex');
       const resetTokenExpiry = new Date(Date.now() + 3600000);
 
-      console.log('🔑 RESET TOKEN:', resetToken);
-      console.log('⏰ Token expiry:', resetTokenExpiry);
-
-      console.log('💾 Saving token to database...');
       await prisma.user.update({
         where: { id: user.id },
         data: {
@@ -315,33 +323,34 @@ const authController = {
           resetPasswordExpires: resetTokenExpiry
         }
       });
-      console.log('✅ Token saved to database');
 
-      // ========== SEND EMAIL ==========
-      console.log('📧 Sending password reset email to:', email);
-      
+      // Send email using Brevo
       try {
-        console.log('📧 Loading mail service...');
         const mailService = require('../config/mail');
-        console.log('📧 Mail service loaded, sending email...');
+        const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+        const resetLink = `${CLIENT_URL}/reset-password?token=${resetToken}`;
         
-        const result = await mailService.sendPasswordResetEmail(email, resetToken);
-        console.log('📧 Email send result:', result);
+        await mailService.sendEmail({
+          to: email,
+          subject: 'Reset Your Password - ISDP Platform',
+          htmlContent: `
+            <h1>Reset Your Password</h1>
+            <p>Click the link below to reset your password:</p>
+            <a href="${resetLink}">Reset Password</a>
+            <p>This link expires in 1 hour.</p>
+          `
+        });
         console.log('✅ Password reset email sent to:', email);
       } catch (emailError) {
-        console.error('❌ Failed to send email:', emailError.message);
-        console.error('❌ Email error stack:', emailError.stack);
-        // Don't fail the request if email fails
+        console.log('⚠️ Could not send password reset email:', emailError.message);
       }
 
-      console.log('✅ Forgot password completed successfully');
       res.json({
         status: 'success',
         message: 'If your email is registered, you will receive a password reset link'
       });
     } catch (error) {
-      console.error('❌ Forgot password error:', error);
-      console.error('❌ Error stack:', error.stack);
+      console.error('Forgot password error:', error);
       res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to process request'
@@ -352,9 +361,6 @@ const authController = {
   async resetPassword(req, res) {
     try {
       const { token, newPassword } = req.body;
-
-      console.log('=== RESET PASSWORD ===');
-      console.log('Token received:', token ? token.substring(0, 15) + '...' : 'none');
 
       if (!token || !newPassword) {
         return res.status(400).json({
@@ -370,8 +376,6 @@ const authController = {
         });
       }
 
-      console.log('Looking for user with token...');
-
       const user = await prisma.user.findFirst({
         where: {
           resetPasswordToken: token,
@@ -382,14 +386,11 @@ const authController = {
       });
 
       if (!user) {
-        console.log('No user found with valid token');
         return res.status(400).json({
           status: 'error',
           message: 'Invalid or expired reset token'
         });
       }
-
-      console.log('User found:', user.id);
 
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(newPassword, salt);
@@ -402,8 +403,6 @@ const authController = {
           resetPasswordExpires: null
         }
       });
-
-      console.log('Password reset successfully for:', user.email);
 
       res.json({
         status: 'success',
