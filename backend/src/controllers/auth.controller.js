@@ -6,6 +6,7 @@ const prisma = new PrismaClient();
 
 const authController = {
   async register(req, res) {
+    console.log("📝 Registration data:", req.body);
     try {
       const { email, password, fullName, phone, county, subCounty } = req.body;
 
@@ -30,6 +31,7 @@ const authController = {
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
+    console.log("💾 Creating user with data:", { email, fullName, county, subCounty });
       const user = await prisma.user.create({
         data: {
           email,
