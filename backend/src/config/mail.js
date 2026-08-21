@@ -1,164 +1,130 @@
-const { TransactionalEmailsApi, SendSmtpEmail } = require('@sendinblue/client');
-const fs = require('fs');
-const path = require('path');
+const brevo = require('@sendinblue/client');
 
-// Simple logger that uses console
-const logger = {
-  info: (...args) => console.log(...args),
-  warn: (...args) => console.warn(...args),
-  error: (...args) => console.error(...args),
-};
+let apiInstance = null;
+let isInitialized = false;
 
-class MailService {
-  constructor() {
-    this.client = null;
-    this.apiKey = process.env.BREVO_API_KEY;
-    this.senderEmail = process.env.BREVO_SENDER_EMAIL || 'noreply@isdp.com';
-    this.senderName = process.env.BREVO_SENDER_NAME || 'ISDP Platform';
-    this.isConfigured = false;
-  }
+// IMPORTANT: Get CLIENT_URL from environment
+const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+console.log('📧 Mail service loaded. CLIENT_URL:', CLIENT_URL);
 
-  async connect() {
-    try {
-      console.log('📧 Initializing Brevo email service...');
-      console.log('📧 API Key present:', !!this.apiKey);
-      console.log('📧 Sender Email:', this.senderEmail);
-      
-      if (!this.apiKey) {
-        console.log('⚠️ Brevo API key not configured. Emails will be logged.');
-        return;
-      }
-
-      this.client = new TransactionalEmailsApi();
-      this.client.setApiKey(0, this.apiKey);
-      this.isConfigured = true;
-      console.log('✅ Brevo email service connected successfully');
-    } catch (error) {
-      console.error('❌ Brevo email connection failed:', error.message);
-      this.isConfigured = false;
-    }
-  }
-
-  renderTemplate(templateName, variables) {
-    try {
-      const templatePath = path.join(__dirname, '../templates', templateName);
-      
-      // Check if template exists
-      if (!fs.existsSync(templatePath)) {
-        console.log('⚠️ Template not found:', templatePath);
-        // Return a simple HTML template
-        return `
-          <h1>Reset Your Password</h1>
-          <p>Click the link below to reset your password:</p>
-          <a href="${variables.resetUrl}">${variables.resetUrl}</a>
-          <p>This link will expire in 1 hour.</p>
-        `;
-      }
-      
-      let html = fs.readFileSync(templatePath, 'utf8');
-      
-      for (const [key, value] of Object.entries(variables)) {
-        html = html.replace(new RegExp(`{{${key}}}`, 'g'), value);
-      }
-      
-      return html;
-    } catch (error) {
-      console.error('Template render error:', error);
-      return `<p>Reset your password: <a href="${variables.resetUrl}">${variables.resetUrl}</a></p>`;
-    }
-  }
-
-  async sendEmail({ to, subject, html, text }) {
-    console.log('📧 sendEmail called');
-    console.log('📧 To:', to);
-    console.log('📧 Subject:', subject);
-    console.log('📧 Configured:', this.isConfigured);
-
-    // If not configured, just log
-    if (!this.isConfigured || !this.client) {
-      console.log(`📧 Email would be sent to ${to}: ${subject}`);
-      console.log(`📧 Email content preview:`, (html || text || '').substring(0, 200));
-      return { messageId: 'mock-id', status: 'logged' };
-    }
-
-    try {
-      const sendSmtpEmail = new SendSmtpEmail();
-      sendSmtpEmail.sender = {
-        email: this.senderEmail,
-        name: this.senderName,
-      };
-      sendSmtpEmail.to = [{ email: to }];
-      sendSmtpEmail.subject = subject;
-      sendSmtpEmail.htmlContent = html || text || '';
-      sendSmtpEmail.textContent = text || html ? html.replace(/<[^>]*>/g, '') : '';
-
-      console.log('📧 Sending email via Brevo...');
-      const response = await this.client.sendTransacEmail(sendSmtpEmail);
-      console.log(`✅ Email sent successfully to ${to}: ${subject}`);
-      console.log('📧 Message ID:', response.messageId);
-      return response;
-    } catch (error) {
-      console.error('❌ Email send error:', error.message);
-      if (error.response) {
-        console.error('❌ Brevo API error:', error.response.body);
-      }
-      throw error;
-    }
-  }
-
-  // Send verification email
-  async sendVerificationEmail(email, token) {
-    const verificationUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email?token=${token}`;
+function initializeBrevo() {
+  try {
+    const apiKey = process.env.BREVO_API_KEY;
     
-    const html = this.renderTemplate('verification.html', {
-      verificationUrl,
-    });
+    if (!apiKey) {
+      console.warn('⚠️ BREVO_API_KEY not set. Email will be disabled.');
+      return null;
+    }
 
-    return this.sendEmail({
-      to: email,
-      subject: 'Verify Your Email - ISDP',
-      html,
-    });
-  }
-
-  // Send password reset email
-  async sendPasswordResetEmail(email, token) {
-    console.log('📧 sendPasswordResetEmail called for:', email);
-    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
-    console.log('📧 Reset URL:', resetUrl);
+    const api = new brevo.TransactionalEmailsApi();
+    const auth = api.authentications['apiKey'];
+    auth.apiKey = apiKey;
     
-    const html = this.renderTemplate('password-reset.html', {
-      resetUrl,
-    });
-
-    return this.sendEmail({
-      to: email,
-      subject: 'Reset Your Password - ISDP',
-      html,
-    });
-  }
-
-  // Send welcome email
-  async sendWelcomeEmail(email, fullName) {
-    const platformUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-    
-    const html = this.renderTemplate('welcome.html', {
-      fullName,
-      platformUrl,
-    });
-
-    return this.sendEmail({
-      to: email,
-      subject: 'Welcome to ISDP',
-      html,
-    });
+    apiInstance = api;
+    isInitialized = true;
+    console.log('✅ Brevo email service initialized successfully');
+    return api;
+  } catch (error) {
+    console.error('❌ Failed to initialize Brevo:', error.message);
+    return null;
   }
 }
 
-// Create singleton instance
-const mailService = new MailService();
+async function sendEmail({ to, subject, htmlContent, textContent }) {
+  if (!isInitialized) {
+    initializeBrevo();
+  }
+  
+  if (!isInitialized || !apiInstance) {
+    console.log('📧 [DEV] Email would be sent to:', to);
+    console.log('📧 [DEV] Subject:', subject);
+    return { 
+      success: true, 
+      message: 'Email logged (Brevo not configured)' 
+    };
+  }
 
-// Connect immediately
-mailService.connect();
+  try {
+    const fromEmail = process.env.BREVO_SENDER_EMAIL || 'pitechtechnologies@gmail.com';
+    const fromName = process.env.BREVO_SENDER_NAME || 'ISDP Platform';
 
-module.exports = mailService;
+    const sendSmtpEmail = {
+      sender: { email: fromEmail, name: fromName },
+      to: Array.isArray(to) ? to.map(email => ({ email })) : [{ email: to }],
+      subject: subject,
+      htmlContent: htmlContent,
+      textContent: textContent || '',
+    };
+
+    console.log('📧 Sending email via Brevo to:', to);
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log('✅ Email sent successfully! Message ID:', result.messageId);
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ Failed to send email:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+async function sendPasswordResetEmail(email, resetToken) {
+  // Use the CLIENT_URL from environment
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+  const resetLink = `${clientUrl}/reset-password?token=${resetToken}`;
+  
+  console.log('🔗 Reset link generated:', resetLink);
+  console.log('📧 Using CLIENT_URL:', clientUrl);
+  
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8">
+      <title>Reset Password</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f7f8f7; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .logo { text-align: center; margin-bottom: 20px; }
+        .logo h1 { color: #00B330; font-size: 28px; }
+        h2 { color: #1a202c; margin-top: 0; }
+        p { color: #4a5568; line-height: 1.6; }
+        .btn { display: inline-block; background: #00B330; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 20px 0; }
+        .footer { text-align: center; font-size: 12px; color: #a0aec0; border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 20px; }
+        .token-box { background: #f7f8f7; padding: 15px; border-radius: 8px; font-size: 12px; word-break: break-all; margin: 10px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="logo">
+          <h1>🌱 ISDP Platform</h1>
+        </div>
+        <h2>Password Reset Request</h2>
+        <p>Hello,</p>
+        <p>We received a request to reset your password. Click the button below to create a new password:</p>
+        <div style="text-align: center;">
+          <a href="${resetLink}" class="btn">Reset Password</a>
+        </div>
+        <p style="font-size: 14px; color: #718096;">If the button doesn't work, copy and paste this link into your browser:</p>
+        <div class="token-box">${resetLink}</div>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+        <div class="footer">
+          &copy; 2026 ISDP Platform. All rights reserved.
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: 'Reset Your Password - ISDP Platform',
+    htmlContent,
+    textContent: `Reset Your Password\n\nClick this link to reset your password: ${resetLink}\n\nThis link expires in 1 hour.`
+  });
+}
+
+module.exports = {
+  initializeBrevo,
+  sendEmail,
+  sendPasswordResetEmail
+};
