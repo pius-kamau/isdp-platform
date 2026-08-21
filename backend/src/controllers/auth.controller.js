@@ -28,10 +28,23 @@ const authController = {
         });
       }
 
+      // Check if phone is already registered
+      if (phone) {
+        const existingPhone = await prisma.user.findUnique({
+          where: { phone }
+        });
+        if (existingPhone) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'This phone number is already registered. Please use a different phone number.'
+          });
+        }
+      }
+
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(password, salt);
 
-    console.log("💾 Creating user with data:", { email, fullName, county, subCounty });
+      console.log("💾 Creating user with data:", { email, fullName, county, subCounty });
       const user = await prisma.user.create({
         data: {
           email,
@@ -57,37 +70,49 @@ const authController = {
         }
       });
 
-      // Try to send verification email (don't fail if email service isn't configured)
+      // Try to send verification email
       try {
         const mailService = require('../config/mail');
         const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
         const verifyLink = `${CLIENT_URL}/verify-email?token=${verificationToken}`;
         
-        await mailService.sendVerificationEmail(email, fullName, verificationToken)
-          to: email,
-          subject: 'Welcome to ISDP Platform - Verify Your Email',
-          htmlContent: `
-            <h1>Welcome to ISDP Platform!</h1>
-            <p>Hi ${fullName},</p>
-            <p>Please verify your email by clicking the link below:</p>
-            <a href="${verifyLink}">Verify Email</a>
-            <p>This link expires in 24 hours.</p>
-          `
-        });
+        const emailResult = await mailService.sendVerificationEmail(email, fullName, verificationToken);
+        console.log('📧 Email send result:', emailResult);
         console.log('✅ Verification email sent to:', email);
+        console.log('🔗 Verification link:', verifyLink);
       } catch (emailError) {
-        console.log('⚠️ Could not send verification email:', emailError.message);
+        console.error('❌ Failed to send verification email:', emailError.message);
+        console.error('❌ Email error stack:', emailError.stack);
+        // Continue - don't fail registration if email fails
       }
 
       const { passwordHash, ...safeUser } = user;
 
       res.status(201).json({
         status: 'success',
-        message: 'User registered successfully. Please verify your email.',
+        message: 'User registered successfully. Please check your email to verify your account.',
         data: safeUser
       });
     } catch (error) {
       console.error('Register error:', error);
+      
+      // Check if it's a unique constraint error
+      if (error.code === 'P2002') {
+        const field = error.meta?.target?.[0];
+        if (field === 'phone') {
+          return res.status(400).json({
+            status: 'error',
+            message: 'This phone number is already registered. Please use a different phone number.'
+          });
+        }
+        if (field === 'email') {
+          return res.status(400).json({
+            status: 'error',
+            message: 'This email is already registered. Please login or use a different email.'
+          });
+        }
+      }
+      
       res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to register user'
@@ -332,19 +357,12 @@ const authController = {
         const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
         const resetLink = `${CLIENT_URL}/reset-password?token=${resetToken}`;
         
-        await mailService.sendVerificationEmail(email, fullName, verificationToken)
-          to: email,
-          subject: 'Reset Your Password - ISDP Platform',
-          htmlContent: `
-            <h1>Reset Your Password</h1>
-            <p>Click the link below to reset your password:</p>
-            <a href="${resetLink}">Reset Password</a>
-            <p>This link expires in 1 hour.</p>
-          `
-        });
+        const emailResult = await mailService.sendPasswordResetEmail(email, resetToken);
+        console.log('📧 Password reset email result:', emailResult);
         console.log('✅ Password reset email sent to:', email);
+        console.log('🔗 Reset link:', resetLink);
       } catch (emailError) {
-        console.log('⚠️ Could not send password reset email:', emailError.message);
+        console.error('❌ Could not send password reset email:', emailError.message);
       }
 
       res.json({
