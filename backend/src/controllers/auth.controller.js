@@ -63,7 +63,7 @@ const authController = {
         const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
         const verifyLink = `${CLIENT_URL}/verify-email?token=${verificationToken}`;
         
-        await mailService.sendEmail({
+        await mailService.sendVerificationEmail(email, fullName, verificationToken)
           to: email,
           subject: 'Welcome to ISDP Platform - Verify Your Email',
           htmlContent: `
@@ -332,7 +332,7 @@ const authController = {
         const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
         const resetLink = `${CLIENT_URL}/reset-password?token=${resetToken}`;
         
-        await mailService.sendEmail({
+        await mailService.sendVerificationEmail(email, fullName, verificationToken)
           to: email,
           subject: 'Reset Your Password - ISDP Platform',
           htmlContent: `
